@@ -8,7 +8,6 @@ export const DEFAULT_REPO_CONFIG = {
   docsDir: 'docs',
   projectsDir: 'projects',
   frontmatterSchema: [
-    { name: 'id', type: 'string' },
     {
       name: 'status',
       type: 'enum',

@@ -319,9 +319,13 @@ export function overseer() {
                   throw new Error(`File "${fileName}" already exists in target directory.`);
                 }
 
-                const initialAttributes: Record<string, any> = { id: generatedId };
+                const initialAttributes: Record<string, any> = {
+                  id: generatedId,
+                  name
+                };
                 (repoConfig.frontmatterSchema || []).forEach((field: any) => {
                   if (field.name === 'id') return;
+                  if (field.name === 'name') return;
                   if (field.type === 'enum' && field.options?.length > 0) {
                     initialAttributes[field.name] = field.options[0];
                   } else {

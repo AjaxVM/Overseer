@@ -1,6 +1,5 @@
 import { createSignal, createEffect, For, Show } from 'solid-js';
 import { marked } from 'marked';
-import path from 'path';
 
 import type { FrontmatterItem, SchemaField } from './types'
 
@@ -9,26 +8,22 @@ marked.setOptions({
   breaks: true
 });
 
-function findActiveTicketName(filePath: string, items: FrontmatterItem[], body: string) {
+function findActiveTicketDetails(filePath: string, items: FrontmatterItem[], body: string): [string, string] {
+  const [_id, ...nameParts] = (filePath.split(/[/\\]/).pop() || '').split('-')
   const configName = items.find(item => item.key === 'name')?.val
-  const configId = items.find(item => item.key === 'id')?.val
+  const configId = items.find(item => item.key === 'id')?.val ?? _id
   if (configName) {
-    // return [configId, configName]
-    return configName
+    return [configId, configName]
   }
 
   // try to read header
   const header = body.split('\n').find(line => line.startsWith('# '))?.slice(2).trim()
   if (header) {
-    // return [configId, header]
-    return header
+    return [configId, header]
   }
 
   // found nothing, just try to desluggify the filename
-  const [_id, ...nameParts] = path.basename(filePath, '.md').split('-')
-  // return [configId, nameParts.join(' ')]
-  return nameParts.join(' ')
-
+  return [configId, nameParts.join(' ')]
 }
 
 export default function App() {
@@ -42,6 +37,7 @@ export default function App() {
   const [activeTab, setActiveTab] = createSignal<'preview' | 'edit'>('preview');
   const [activeFilePath, setActiveFilePath] = createSignal<string | null>(null);
   const [activeTicketName, setActiveTicketName] = createSignal<string | null>(null);
+  const [activeTicketId, setActiveTicketId] = createSignal<string | null>(null);
   const [activeRepoPath, setActiveRepoPath] = createSignal<string | null>(null);
   const [attributes, setAttributes] = createSignal<FrontmatterItem[]>([]);
   const [markdownBody, setMarkdownBody] = createSignal('');
@@ -99,7 +95,10 @@ export default function App() {
 
       setAttributes(items);
       setMarkdownBody(data.body || '');
-      setActiveTicketName(findActiveTicketName(filePath, items, data.body || ''))
+      const [id, name] = findActiveTicketDetails(filePath, items, data.body || '')
+      console.log(id, name)
+      setActiveTicketId(id)
+      setActiveTicketName(name)
     } catch (err: any) {
       console.error("Failed to load file:", err);
     }
@@ -376,7 +375,7 @@ export default function App() {
           <div style={{ display: "flex", "justify-content": "space-between", "align-items": "center", "margin-bottom": "16px" }}>
             <div>
               {/* <h2 style={{ margin: 0 }}>{activeFilePath()?.split('/').pop()}</h2> */}
-              <h2 style={{ margin: 0 }}>{activeTicketName()}</h2>
+              <h2 style={{ margin: 0 }}>{activeTicketId()}: {activeTicketName()}</h2>
               <div style={{ "font-size": "0.8rem", color: "#94a3b8", "margin-top": "4px" }}>{activeFilePath()}</div>
             </div>
 
