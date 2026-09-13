@@ -14,6 +14,11 @@ export const DEFAULT_REPO_CONFIG = {
       options: ['idea', 'designing', 'planning', 'ready', 'working', 'reviewing', 'done']
     },
     {
+      name: 'type',
+      type: 'enum',
+      options: ['bug', 'feature',  'design']
+    },
+    {
       name: 'estimate',
       type: 'enum',
       options: ['tiny', 'small', 'medium', 'large', 'extra-large', 'unknown']
