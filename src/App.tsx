@@ -321,7 +321,7 @@ export default function App() {
             style={{ 
               color: activeFilePath() === props.node.path ? "#2563eb" : "#4b5563", 
               "font-weight": activeFilePath() === props.node.path ? "bold" : "normal",
-              "margin-left": "16px", "padding": "4px 8px", "font-size": "0.9rem",
+              "font-size": "0.9rem",
               cursor: "pointer", "border-radius": "4px",
               background: activeFilePath() === props.node.path ? "#eff6ff" : "transparent"
             }}

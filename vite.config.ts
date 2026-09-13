@@ -77,17 +77,18 @@ function slugify(text: string): string {
     .replace(/(^-|-$)+/g, '');
 }
 
-function getNextId(parentDir: string): number {
-  let nextNum = 1;
-  if (fs.existsSync(parentDir)) {
-    const entries = fs.readdirSync(parentDir);
-    nextNum = entries.length + 1;
+function getNextTicketNumber(parentDir: string): number {
+  if (!fs.existsSync(parentDir)) return 1;
+  const entries = fs.readdirSync(parentDir, { withFileTypes: true });
+  const files = entries.filter(entry => entry.isFile()).filter(entry => entry.name.endsWith('.md')).map(entry => entry.name)
+  if (files.length === 0) {
+    return 1
   }
-
-  return nextNum
+  const latestFile = Math.max(...files.map(entry => parseInt(entry.split('-')[0])))
+  return Math.max(latestFile + 1, files.length + 1)
 }
 
-function generateItemId(parentDir: string, repoRoot: string, repoConfig: any, nextId: number): string {
+function generateHierarchicalTicketId(parentDir: string, repoRoot: string, repoConfig: any, ticketNumber: number): string {
   const projectsPath = path.join(repoRoot, repoConfig.projectsDir);
   const docsPath = path.join(repoRoot, repoConfig.docsDir);
   
@@ -101,8 +102,7 @@ function generateItemId(parentDir: string, repoRoot: string, repoConfig: any, ne
   }
 
   const parentSegments = relativePath.split(path.sep).filter(Boolean).map(slugify);
-
-  const idParts = [...parentSegments, String(nextId)];
+  const idParts = [...parentSegments, String(ticketNumber)];
   return idParts.join('-');
 }
 
@@ -309,29 +309,32 @@ function overseerApiPlugin() {
               }
 
               const repoConfig = getOrInitRepoConfig(repoPath);
-              const nextNumId = getNextId(parentPath)
-              const generatedId = generateItemId(parentPath, repoPath, repoConfig, nextNumId);
               const itemSlug = slugify(name);
 
               if (type === 'directory') {
+                // Directories are named purely by title slug
                 const newDirPath = path.join(parentPath, itemSlug);
                 if (fs.existsSync(newDirPath)) {
                   throw new Error(`Directory "${itemSlug}" already exists in parent.`);
                 }
                 fs.mkdirSync(newDirPath, { recursive: true });
                 
+                // Save clean project name in project.json without ID
                 fs.writeFileSync(
                   path.join(newDirPath, 'project.json'),
-                  JSON.stringify({ id: nextNumId, name: name.trim() }, null, 2) + '\n',
+                  JSON.stringify({ name: name.trim() }, null, 2) + '\n',
                   'utf-8'
                 );
 
                 server.ws.send({ type: 'custom', event: 'projects-update' });
                 res.setHeader('Content-Type', 'application/json');
-                return res.end(JSON.stringify({ success: true, createdPath: newDirPath, id: generatedId }));
+                return res.end(JSON.stringify({ success: true, createdPath: newDirPath }));
               } else {
-                // Name pattern: <generated-id>-<text-input-slug>.md
-                const fileName = `${nextNumId}-${itemSlug}.md`;
+                // Tickets are prefixed strictly by next sequential number in folder: <nextNum>-<title-slug>.md
+                const ticketNum = getNextTicketNumber(parentPath);
+                const generatedId = generateHierarchicalTicketId(parentPath, repoPath, repoConfig, ticketNum);
+                const fileName = `${ticketNum}-${itemSlug}.md`;
+                
                 const newFilePath = path.join(parentPath, fileName);
                 if (fs.existsSync(newFilePath)) {
                   throw new Error(`File "${fileName}" already exists in target directory.`);
