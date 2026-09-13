@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+
+    "jsx": "preserve",
+    "jsxImportSource": "solid-js",
+
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+
+    // The vendored quoin core writes its own imports as "./results.ts", and it
+    // is copied rather than edited, so the extension has to be legal here.
+    // Only allowed alongside noEmit, which is the arrangement anyway -- Vite
+    // strips the types and tsc never writes a file.
+    "allowImportingTsExtensions": true,
+    "types": ["vite/client"],
+
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
+  },
+  "include": ["."]
+}
