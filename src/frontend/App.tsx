@@ -337,7 +337,10 @@ export default function App() {
               "font-weight": activeFilePath() === props.node.path ? "bold" : "normal",
               "font-size": "0.9rem",
               cursor: "pointer", "border-radius": "4px",
-              background: activeFilePath() === props.node.path ? "#eff6ff" : "transparent"
+              background: activeFilePath() === props.node.path ? "#eff6ff" : "transparent",
+              "text-wrap": "nowrap",
+              overflow: "hidden",
+              "text-overflow": "ellipsis"
             }}
           >
             📄 {props.node.name}
@@ -373,7 +376,7 @@ export default function App() {
           </div>
         }>
           <div style={{ display: "flex", "justify-content": "space-between", "align-items": "center", "margin-bottom": "16px" }}>
-            <div>
+            <div style={{ "max-width": "60%" }}>
               {/* <h2 style={{ margin: 0 }}>{activeFilePath()?.split('/').pop()}</h2> */}
               <h2 style={{ margin: 0 }}>{activeTicketId()}: {activeTicketName()}</h2>
               <div style={{ "font-size": "0.8rem", color: "#94a3b8", "margin-top": "4px" }}>{activeFilePath()}</div>
