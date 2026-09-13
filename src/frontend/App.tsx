@@ -261,15 +261,35 @@ export default function App() {
     }
   };
 
+  const getItemBool = (props: any) => {
+    const currentNodeName = `node:${props.node.path ?? props.node.repoPath}`
+    return localStorage.getItem(currentNodeName) === 'true'
+  }
+
+  const toggleItemBool = (props: any) => {
+    const currentNodeName = `node:${props.node.path ?? props.node.repoPath}`
+    if (localStorage.getItem(currentNodeName) === 'true') {
+      localStorage.removeItem(currentNodeName)
+    } else {
+      localStorage.setItem(currentNodeName, 'true')
+    }
+  }
+
   const TreeNode = (props: { node: any; repoPath?: string }) => {
     const currentRepoPath = props.node.type === 'repository' ? props.node.repoPath : props.repoPath;
+
+    console.log(props)
 
     return (
       <div style={{ "margin-left": "16px", "padding-top": "4px" }}>
         {/* Repository Level */}
         <Show when={props.node.type === 'repository'}>
-          <details open>
-            <summary style={{ cursor: "pointer", "font-weight": "800", color: "#0f172a", "margin-bottom": "6px", display: "flex", "align-items": "center", "justify-content": "space-between" }}>
+          {/* <details open> */}
+          <details open={ getItemBool(props) }>
+            <summary
+              style={{ cursor: "pointer", "font-weight": "800", color: "#0f172a", "margin-bottom": "6px", display: "flex", "align-items": "center", "justify-content": "space-between" }}
+              onClick={() => { toggleItemBool(props) }}
+            >
               <span>📦 {props.node.name}</span>
               <button 
                 onClick={(e) => { e.preventDefault(); openRepoConfigModal(props.node); }} 
@@ -287,8 +307,11 @@ export default function App() {
 
         {/* Category Folders */}
         <Show when={props.node.type === 'category'}>
-          <details open>
-            <summary style={{ cursor: "pointer", "font-weight": "700", color: props.node.categoryType === 'docs' ? "#0284c7" : "#16a34a", display: "flex", "align-items": "center", "justify-content": "space-between" }}>
+          <details open={ getItemBool(props) }>
+            <summary
+              style={{ cursor: "pointer", "font-weight": "700", color: props.node.categoryType === 'docs' ? "#0284c7" : "#16a34a", display: "flex", "align-items": "center", "justify-content": "space-between" }}
+              onClick={() => { toggleItemBool(props) }}
+            >
               <span>{props.node.categoryType === 'docs' ? '📚' : '📋'} {props.node.name}</span>
               <button
                 onClick={(e) => { e.preventDefault(); openCreateModal(props.node.path, currentRepoPath!); }}
@@ -306,8 +329,11 @@ export default function App() {
 
         {/* Standard Directories */}
         <Show when={props.node.type === 'directory'}>
-          <details open>
-            <summary style={{ cursor: "pointer", "font-weight": "600", color: "#2563eb", display: "flex", "align-items": "center", "justify-content": "space-between" }}>
+          <details open={ getItemBool(props) }>
+            <summary
+              style={{ cursor: "pointer", "font-weight": "600", color: "#2563eb", display: "flex", "align-items": "center", "justify-content": "space-between" }}
+              onClick={() => { toggleItemBool(props) }}
+            >
               <span>
                 📁 {props.node.name}
                 <Show when={props.node.projectData?.id}>
