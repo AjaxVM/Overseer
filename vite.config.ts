@@ -80,7 +80,7 @@ function slugify(text: string): string {
 function getNextTicketNumber(parentDir: string): number {
   if (!fs.existsSync(parentDir)) return 1;
   const entries = fs.readdirSync(parentDir, { withFileTypes: true });
-  const files = entries.filter(entry => entry.isFile()).filter(entry => entry.name.endsWith('.md')).map(entry => entry.name)
+  const files = entries.filter(entry => entry.isFile()).filter(entry => entry.name.toLowerCase().endsWith('.md')).map(entry => entry.name)
   if (files.length === 0) {
     return 1
   }
@@ -149,7 +149,7 @@ function stringifyFrontmatter(attributes: Record<string, any>, body: string) {
 
 function scanDirectory(dir: string): any[] {
   if (!fs.existsSync(dir)) return [];
-  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  const entries = fs.readdirSync(dir, { withFileTypes: true }).filter(entry => entry.isDirectory() || entry.name.toLowerCase().endsWith('.md'));
   
   return entries.map(entry => {
     const fullPath = path.join(dir, entry.name);
