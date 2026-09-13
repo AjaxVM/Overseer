@@ -1,17 +1,7 @@
 import { createSignal, createEffect, For, Show } from 'solid-js';
 import { marked } from 'marked';
 
-interface FrontmatterItem {
-  key: string;
-  val: string;
-}
-
-interface SchemaField {
-  name: string;
-  type: 'string' | 'number' | 'enum';
-  options?: string[];
-  optionsRaw?: string;
-}
+import type { FrontmatterItem, SchemaField } from './types'
 
 marked.setOptions({
   gfm: true,

@@ -173,7 +173,7 @@ function openNativeFolderPicker(): Promise<string> {
   });
 }
 
-export function overseerApiPlugin() {
+export function overseer() {
   const globalConfig = getOrInitOverseerGlobalConfig();
 
   return {
