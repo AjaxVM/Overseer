@@ -2,7 +2,7 @@
 id: poc-15
 name: Change how we index projects
 status: idea
-type: bug
+type: feature
 estimate: tiny
 complexity: simple
 priority: must
@@ -26,3 +26,5 @@ A few proposals flow from that:
   - Instead, opening a sub-project shifts the sidebar to have a top-level return to parent marker
   - side bar now shows the tickets/sun-projects of the current sub-project
 - We can add the columnar/kanban view which only is tracking the tickets/sub-projects of the current project, which is a better grain than trying to walk down the structure
+
+The other thing we are gonna need to do is change to UUIDs (maybe default to 5 characters, configurable in each repo) - the incrementing digits are nice for human readability and scanning, but I think we really do need other sort abilities, and we are gonna conflict with multiple users with the incremental ids. We'd also force users to update the projectmap/metadata for a project when they resolve those conflicts.
