@@ -1,0 +1,167 @@
+{
+  "name": "PoC",
+  "childOrder": [],
+  "projectmap": {
+    "tickets": [
+      {
+        "id": "poc-1",
+        "name": "Add type as a default frontmatter field",
+        "status": "done",
+        "fileName": "1-add-type-as-a-default-frontmatter-field.md",
+        "filePath": "C:\\my_progs\\overseer\\projects\\poc\\1-add-type-as-a-default-frontmatter-field.md",
+        "mtime": 1789322255945.864
+      },
+      {
+        "id": "poc-2",
+        "name": "Fix ticket and folder name display",
+        "status": "done",
+        "fileName": "2-fix-ticket-and-folder-name-display.md",
+        "filePath": "C:\\my_progs\\overseer\\projects\\poc\\2-fix-ticket-and-folder-name-display.md",
+        "mtime": 1789322031313.625
+      },
+      {
+        "id": "poc-3",
+        "name": "Alert if navigating away from unsaved",
+        "status": "idea",
+        "fileName": "3-alert-if-navigating-away-from-unsaved.md",
+        "filePath": "C:\\my_progs\\overseer\\projects\\poc\\3-alert-if-navigating-away-from-unsaved.md",
+        "mtime": 1789317303354.4692
+      },
+      {
+        "id": "poc-4",
+        "name": "Allow quick edit of Frontmatter fields from Preview",
+        "status": "idea",
+        "fileName": "4-allow-quick-edit-of-frontmatter-fields-from-preview.md",
+        "filePath": "C:\\my_progs\\overseer\\projects\\poc\\4-allow-quick-edit-of-frontmatter-fields-from-preview.md",
+        "mtime": 1789317334004.5527
+      },
+      {
+        "id": "poc-5",
+        "name": "Support assignable fields",
+        "status": "idea",
+        "fileName": "5-support-assignable-fields.md",
+        "filePath": "C:\\my_progs\\overseer\\projects\\poc\\5-support-assignable-fields.md",
+        "mtime": 1789317422057.767
+      },
+      {
+        "id": "poc-6",
+        "name": "Add a field quick links weird",
+        "status": "idea",
+        "fileName": "6-add-a-field-quick-links-weird.md",
+        "filePath": "C:\\my_progs\\overseer\\projects\\poc\\6-add-a-field-quick-links-weird.md",
+        "mtime": 1789317524404.7544
+      },
+      {
+        "id": "poc-7",
+        "name": "Ticket header needs to be sticky",
+        "status": "idea",
+        "fileName": "7-ticket-header-needs-to-be-sticky.md",
+        "filePath": "C:\\my_progs\\overseer\\projects\\poc\\7-ticket-header-needs-to-be-sticky.md",
+        "mtime": 1789317560692.2764
+      },
+      {
+        "id": "poc-8",
+        "name": "Edit header improvements",
+        "status": "done",
+        "fileName": "8-edit-header-improvements.md",
+        "filePath": "C:\\my_progs\\overseer\\projects\\poc\\8-edit-header-improvements.md",
+        "mtime": 1789322762453.1797
+      },
+      {
+        "id": "poc-9",
+        "name": "Support moving tickets between projects",
+        "status": "idea",
+        "fileName": "9-support-moving-tickets-between-projects.md",
+        "filePath": "C:\\my_progs\\overseer\\projects\\poc\\9-support-moving-tickets-between-projects.md",
+        "mtime": 1789317765408.4604
+      },
+      {
+        "id": "poc-10",
+        "name": "Default closed on the projects",
+        "status": "idea",
+        "fileName": "10-default-closed-on-the-projects.md",
+        "filePath": "C:\\my_progs\\overseer\\projects\\poc\\10-default-closed-on-the-projects.md",
+        "mtime": 1789317871569.152
+      },
+      {
+        "id": "poc-11",
+        "name": "Some general slowness",
+        "status": "idea",
+        "fileName": "11-some-general-slowness.md",
+        "filePath": "C:\\my_progs\\overseer\\projects\\poc\\11-some-general-slowness.md",
+        "mtime": 1789319186500.4863
+      },
+      {
+        "id": "poc-12",
+        "name": "currently viewed ticket/project should persist in url and restore",
+        "status": "idea",
+        "fileName": "12-currently-viewed-ticket-project-should-persist-in-url-and-restore.md",
+        "filePath": "C:\\my_progs\\overseer\\projects\\poc\\12-currently-viewed-ticket-project-should-persist-in-url-and-restore.md",
+        "mtime": 1789322594195.1426
+      },
+      {
+        "id": "poc-13",
+        "name": "Another Cool Test",
+        "status": "idea",
+        "fileName": "13-another-cool-test.md",
+        "filePath": "C:\\my_progs\\overseer\\projects\\poc\\13-another-cool-test.md",
+        "mtime": 1789321277068.672
+      },
+      {
+        "id": "poc-14",
+        "name": "AGENTS.md reference for LLMs to look at to understand Overseer structure",
+        "status": "idea",
+        "type": "bug",
+        "fileName": "14-agents-md-reference-for-llms-to-look-at-to-understand-overseer-structure.md",
+        "filePath": "C:\\my_progs\\overseer\\projects\\poc\\14-agents-md-reference-for-llms-to-look-at-to-understand-overseer-structure.md",
+        "mtime": 1789322404197.6492
+      },
+      {
+        "id": "poc-15",
+        "name": "Change how we index projects",
+        "status": "done",
+        "type": "feature",
+        "fileName": "15-change-how-we-index-projects.md",
+        "filePath": "C:\\my_progs\\overseer\\projects\\poc\\15-change-how-we-index-projects.md",
+        "mtime": 1789395903109.9985
+      },
+      {
+        "id": "poc-16",
+        "name": "Support archiving tickets/projects.",
+        "status": "idea",
+        "type": "bug",
+        "fileName": "16-support-archiving-tickets-projects.md",
+        "filePath": "C:\\my_progs\\overseer\\projects\\poc\\16-support-archiving-tickets-projects.md",
+        "mtime": 1789323928934.501
+      },
+      {
+        "id": "poc-17",
+        "name": "pre-commit hook to true up edited tickets",
+        "status": "idea",
+        "type": "feature",
+        "fileName": "17-pre-commit-hook-to-true-up-edited-tickets.md",
+        "filePath": "C:\\my_progs\\overseer\\projects\\poc\\17-pre-commit-hook-to-true-up-edited-tickets.md",
+        "mtime": 1789335499830.7798
+      },
+      {
+        "id": "poc-18",
+        "name": "Typing in the name/metadata field is losing focus each key press",
+        "status": "idea",
+        "type": "bug",
+        "fileName": "18-typing-in-the-name-metadata-field-is-losing-focus-each-key-press.md",
+        "filePath": "C:\\my_progs\\overseer\\projects\\poc\\18-typing-in-the-name-metadata-field-is-losing-focus-each-key-press.md",
+        "mtime": 1789335464312.618
+      },
+      {
+        "id": "poc-19",
+        "name": "Some buttons (ie create modal) don't show a hand/pointer on hover",
+        "status": "idea",
+        "type": "bug",
+        "fileName": "19-some-buttons-ie-create-modal-don-t-show-a-hand-pointer-on-hover.md",
+        "filePath": "C:\\my_progs\\overseer\\projects\\poc\\19-some-buttons-ie-create-modal-don-t-show-a-hand-pointer-on-hover.md",
+        "mtime": 1789335483679.8474
+      }
+    ],
+    "subprojects": []
+  }
+}
