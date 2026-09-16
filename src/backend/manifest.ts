@@ -15,6 +15,7 @@ export interface SubProjectSummary {
   name: string;
   slug: string;
   path: string;
+  mtime?: number;
 }
 
 export interface ProjectManifest {
@@ -140,12 +141,36 @@ export function loadOrTrueUpProject(projectDir: string, _repoConfig?: any): Proj
 
   const entries = fs.readdirSync(projectDir, { withFileTypes: true });
 
-  // 1. Detect subprojects
+  let hasChanges = false;
+
+  const cachedSubprojectsMap = new Map<string, SubProjectSummary>();
+  (existingManifest.projectmap?.subprojects || []).forEach(sub => {
+    cachedSubprojectsMap.set(sub.slug, sub);
+  });
+
+  // 1. Detect subprojects. A sub-directory's own manifest mtime gates whether we
+  // re-read it - without this, every navigation re-read every sub-project's
+  // _project.json on every request, even when nothing under it had changed.
   const subprojects: SubProjectSummary[] = [];
   entries
     .filter(entry => entry.isDirectory() && !entry.name.startsWith('.'))
     .forEach(entry => {
       const subDirPath = path.join(projectDir, entry.name);
+      const subManifestPath = getProjectManifestPath(subDirPath);
+      let subMtime: number | undefined;
+      try {
+        subMtime = fs.statSync(subManifestPath).mtimeMs;
+      } catch (e) {
+        subMtime = undefined;
+      }
+
+      const cached = cachedSubprojectsMap.get(entry.name);
+      if (cached && cached.mtime === subMtime) {
+        subprojects.push(cached);
+        return;
+      }
+
+      hasChanges = true;
       let subName = entry.name;
       const subManifest = readRawProjectManifest(subDirPath);
       if (subManifest?.name) {
@@ -154,7 +179,8 @@ export function loadOrTrueUpProject(projectDir: string, _repoConfig?: any): Proj
       subprojects.push({
         name: subName,
         slug: entry.name,
-        path: subDirPath
+        path: subDirPath,
+        mtime: subMtime
       });
     });
 
@@ -167,7 +193,6 @@ export function loadOrTrueUpProject(projectDir: string, _repoConfig?: any): Proj
       !ignoredFiles.has(entry.name.toLowerCase())
   );
 
-  let hasChanges = false;
   const updatedTickets: TicketSummary[] = [];
 
   ticketFiles.forEach(fileEntry => {

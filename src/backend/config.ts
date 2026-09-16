@@ -4,7 +4,20 @@ import path from 'path';
 
 export const GLOBAL_CONFIG_PATH = path.join(os.homedir(), '.overseer.config.json');
 
-export const DEFAULT_REPO_CONFIG = {
+export interface FrontmatterFieldConfig {
+  name: string;
+  type: 'string' | 'number' | 'enum';
+  options?: string[];
+}
+
+export interface RepoConfig {
+  docsDir: string;
+  projectsDir: string;
+  frontmatterSchema: FrontmatterFieldConfig[];
+  idFormat?: string;
+}
+
+export const DEFAULT_REPO_CONFIG: RepoConfig = {
   docsDir: 'docs',
   projectsDir: 'projects',
   frontmatterSchema: [
@@ -35,6 +48,28 @@ export const DEFAULT_REPO_CONFIG = {
     }
   ]
 };
+
+export function getOrInitRepoConfig(repoRoot: string): RepoConfig {
+  const repoConfigPath = path.join(repoRoot, 'overseer.json');
+
+  if (!fs.existsSync(repoConfigPath)) {
+    fs.writeFileSync(repoConfigPath, JSON.stringify(DEFAULT_REPO_CONFIG, null, 2) + '\n', 'utf-8');
+    return DEFAULT_REPO_CONFIG;
+  }
+
+  try {
+    const raw = fs.readFileSync(repoConfigPath, 'utf-8');
+    const parsed = JSON.parse(raw);
+    return {
+      docsDir: parsed.docsDir || DEFAULT_REPO_CONFIG.docsDir,
+      projectsDir: parsed.projectsDir || DEFAULT_REPO_CONFIG.projectsDir,
+      frontmatterSchema: parsed.frontmatterSchema || DEFAULT_REPO_CONFIG.frontmatterSchema,
+      idFormat: parsed.idFormat || DEFAULT_REPO_CONFIG.idFormat || 'short-uuid'
+    };
+  } catch (e) {
+    return DEFAULT_REPO_CONFIG;
+  }
+}
 
 export function getOrInitOverseerGlobalConfig() {
   if (!fs.existsSync(GLOBAL_CONFIG_PATH)) {

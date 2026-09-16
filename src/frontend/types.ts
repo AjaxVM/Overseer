@@ -24,6 +24,7 @@ export interface SubProjectSummary {
   name: string;
   slug: string;
   path: string;
+  mtime?: number;
 }
 
 export interface ProjectManifest {
@@ -45,7 +46,42 @@ export interface ProjectDetailsResponse {
   description?: string;
 }
 
-export interface BreadcrumbItem {
+export interface RepoConfig {
+  docsDir: string;
+  projectsDir: string;
+  frontmatterSchema: SchemaField[];
+  idFormat?: string;
+}
+
+export interface ProjectTreeEntry {
   name: string;
+  slug: string;
+  type: 'directory';
   path: string;
+  projectData: ProjectManifest | null;
+  hasManifest: boolean;
+  children: [];
+}
+
+export interface DocTreeEntry {
+  name: string;
+  type: 'directory' | 'file';
+  path: string;
+  children?: DocTreeEntry[];
+}
+
+export interface RepoTreeCategory {
+  name: string;
+  type: 'category';
+  categoryType: 'docs' | 'projects';
+  path: string;
+  children: (ProjectTreeEntry | DocTreeEntry)[];
+}
+
+export interface RepoTreeNode {
+  name: string;
+  type: 'repository';
+  repoPath: string;
+  config: RepoConfig;
+  children: RepoTreeCategory[];
 }
