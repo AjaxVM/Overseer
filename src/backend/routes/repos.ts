@@ -1,28 +1,41 @@
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
-import { exec } from 'child_process';
 import { GLOBAL_CONFIG_PATH, getOrInitOverseerGlobalConfig, getOrInitRepoConfig } from '../config';
 import type { RepoConfig } from '../config';
 import { readRawProjectManifest, saveProjectManifest } from '../manifest';
 import type { RouteContext } from '../types';
 
-function openNativeFolderPicker(): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const platform = os.platform();
-    let command = '';
-    if (platform === 'darwin') {
-      command = `osascript -e 'POSIX path of (choose folder with prompt "Select Repository Root")'`;
-    } else if (platform === 'win32') {
-      command = `powershell -Command "Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Host $f.SelectedPath }"`;
-    } else {
-      command = `zenity --file-selection --directory || kdialog --getexistingdirectory`;
-    }
-    exec(command, (error, stdout) => {
-      if (error || !stdout.trim()) reject(new Error('Folder selection cancelled.'));
-      else resolve(stdout.trim());
-    });
-  });
+// Backs the in-app folder browser in the Register Repository modal. Replaces the old
+// PowerShell/WinForms FolderBrowserDialog spawn, which took a couple of seconds to open
+// (process spawn + WinForms assembly load) and could open behind the browser window.
+// With no path given, starts at the directory the dev server was launched from - that's
+// almost always the most useful starting point (usually a sibling of the repo to register).
+export function handleGetFsBrowse(req: any, res: any) {
+  const urlObj = new URL(req.url, 'http://localhost');
+  const requested = urlObj.searchParams.get('path') || '';
+  const targetPath = requested || process.cwd();
+
+  if (!fs.existsSync(targetPath) || !fs.statSync(targetPath).isDirectory()) {
+    res.statusCode = 400;
+    return res.end(JSON.stringify({ error: 'Not a valid directory' }));
+  }
+
+  let directories: { name: string; path: string }[] = [];
+  try {
+    directories = fs
+      .readdirSync(targetPath, { withFileTypes: true })
+      .filter(e => e.isDirectory() && !e.name.startsWith('.'))
+      .map(e => ({ name: e.name, path: path.join(targetPath, e.name) }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  } catch (e) {
+    // Permission-denied directories etc. - show an empty listing rather than erroring the whole browse.
+  }
+
+  const root = path.parse(targetPath).root;
+  const parent = targetPath === root ? null : path.dirname(targetPath);
+
+  res.setHeader('Content-Type', 'application/json');
+  res.end(JSON.stringify({ path: targetPath, parent, directories }));
 }
 
 // Ensures a repo's docs/projects folders exist, and that the projects root has
@@ -80,16 +93,6 @@ export function handlePostConfigSave(ctx: RouteContext, req: any, res: any) {
       res.end(JSON.stringify({ error: e.message }));
     }
   });
-}
-
-export function handlePostDialogPickFolder(_req: any, res: any) {
-  res.setHeader('Content-Type', 'application/json');
-  openNativeFolderPicker()
-    .then(folderPath => res.end(JSON.stringify({ folderPath })))
-    .catch(err => {
-      res.statusCode = 400;
-      res.end(JSON.stringify({ error: err.message }));
-    });
 }
 
 export function handlePostProjectsAdd(ctx: RouteContext, req: any, res: any) {

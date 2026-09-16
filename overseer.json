@@ -1,1 +1,74 @@
-{}
+{
+  "docsDir": "docs",
+  "projectsDir": "projects",
+  "frontmatterSchema": [
+    {
+      "name": "status",
+      "type": "enum",
+      "options": [
+        "idea",
+        "designing",
+        "planning",
+        "ready",
+        "working",
+        "reviewing",
+        "done"
+      ],
+      "optionColors": {
+        "idea": "#8B5CF6",
+        "designing": "#EAB308",
+        "planning": "#F97316",
+        "ready": "#EC4899",
+        "working": "#3B82F6",
+        "reviewing": "#14B8A6",
+        "done": "#126732"
+      }
+    },
+    {
+      "name": "type",
+      "type": "enum",
+      "options": [
+        "bug",
+        "feature",
+        "design"
+      ],
+      "optionColors": {
+        "bug": "#ff6666",
+        "feature": "#b0b7ec",
+        "design": "#fff14d"
+      }
+    },
+    {
+      "name": "estimate",
+      "type": "enum",
+      "options": [
+        "tiny",
+        "small",
+        "medium",
+        "large",
+        "extra-large",
+        "unknown"
+      ]
+    },
+    {
+      "name": "complexity",
+      "type": "enum",
+      "options": [
+        "simple",
+        "moderate",
+        "intense",
+        "extreme"
+      ]
+    },
+    {
+      "name": "priority",
+      "type": "enum",
+      "options": [
+        "must",
+        "should",
+        "could",
+        "maybe"
+      ]
+    }
+  ]
+}

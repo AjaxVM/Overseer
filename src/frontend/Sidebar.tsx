@@ -1,43 +1,8 @@
 import { createSignal, For, Show } from 'solid-js';
-import type { Accessor } from 'solid-js';
+import type { Accessor, JSX } from 'solid-js';
+import Icon from './Icon';
+import { colors, font, getStatusBadgeStyle, getTypeBadgeStyle } from './theme';
 import type { DocTreeEntry, ProjectDetailsResponse, RepoTreeNode, TicketSummary } from './types';
-
-function getStatusBadgeStyle(status: string): { bg: string; text: string } {
-  switch (status.toLowerCase()) {
-    case 'idea':
-      return { bg: '#e0e7ff', text: '#4338ca' };
-    case 'designing':
-    case 'design':
-      return { bg: '#ede9fe', text: '#6d28d9' };
-    case 'planning':
-      return { bg: '#fef3c7', text: '#b45309' };
-    case 'ready':
-      return { bg: '#e0f2fe', text: '#0369a1' };
-    case 'working':
-    case 'in-progress':
-      return { bg: '#ffedd5', text: '#c2410c' };
-    case 'reviewing':
-    case 'in-review':
-      return { bg: '#dbeafe', text: '#1d4ed8' };
-    case 'done':
-      return { bg: '#dcfce7', text: '#15803d' };
-    default:
-      return { bg: '#f1f5f9', text: '#475569' };
-  }
-}
-
-function getTypeBadgeStyle(type?: string): { bg: string; text: string } {
-  switch (type?.toLowerCase()) {
-    case 'bug':
-      return { bg: '#fee2e2', text: '#b91c1c' };
-    case 'feature':
-      return { bg: '#dbeafe', text: '#1d4ed8' };
-    case 'design':
-      return { bg: '#f3e8ff', text: '#7e22ce' };
-    default:
-      return { bg: '#f1f5f9', text: '#475569' };
-  }
-}
 
 interface SidebarProps {
   tree: Accessor<RepoTreeNode[]>;
@@ -51,6 +16,67 @@ interface SidebarProps {
   onOpenCreateModal: (parentPath: string, repoPath: string) => void;
   onOpenRepoConfigModal: (repoNode: RepoTreeNode) => void;
   onAddRepoClick: () => void;
+}
+
+function SectionHeader(props: { icon: 'folder' | 'ticket' | 'book'; label: string; count: number; open: boolean; onToggle: () => void }) {
+  return (
+    <div
+      onClick={props.onToggle}
+      style={{
+        display: 'flex',
+        'align-items': 'center',
+        'justify-content': 'space-between',
+        padding: '5px 2px',
+        cursor: 'pointer',
+        'user-select': 'none'
+      }}
+    >
+      <div style={{ display: 'flex', 'align-items': 'center', gap: '7px', color: colors.inkSoft, 'font-family': font.sans, 'font-size': '0.78rem', 'font-weight': 600 }}>
+        <Icon name={props.icon} size={14} style={{ color: colors.bronze }} />
+        {props.label}
+        <span style={{ color: colors.inkFaint, 'font-weight': 500 }}>({props.count})</span>
+      </div>
+      <Icon name={props.open ? 'chevronDown' : 'chevronRight'} size={13} style={{ color: colors.inkFaint }} />
+    </div>
+  );
+}
+
+const rowHoverStyle = { background: colors.paperCard, borderLeftColor: colors.borderStrong };
+const rowIdleStyle = { background: 'transparent', borderLeftColor: 'transparent' };
+
+function ListRow(props: { icon: JSX.Element; label: string; selected?: boolean; trailing?: JSX.Element; onClick: () => void; title?: string }) {
+  return (
+    <div
+      onClick={props.onClick}
+      title={props.title}
+      style={{
+        display: 'flex',
+        'align-items': 'center',
+        gap: '8px',
+        padding: '7px 8px 7px 9px',
+        'border-left': `3px solid ${props.selected ? colors.blue : 'transparent'}`,
+        background: props.selected ? colors.blueTint : 'transparent',
+        'border-radius': '0 6px 6px 0',
+        cursor: 'pointer',
+        'font-family': font.sans,
+        'font-size': '0.84rem',
+        color: props.selected ? colors.blue : colors.ink,
+        'font-weight': props.selected ? 600 : 400,
+        'white-space': 'nowrap',
+        overflow: 'hidden'
+      }}
+      onMouseEnter={e => {
+        if (!props.selected) Object.assign(e.currentTarget.style, rowHoverStyle);
+      }}
+      onMouseLeave={e => {
+        if (!props.selected) Object.assign(e.currentTarget.style, rowIdleStyle);
+      }}
+    >
+      {props.icon}
+      <span style={{ overflow: 'hidden', 'text-overflow': 'ellipsis', flex: 1 }}>{props.label}</span>
+      {props.trailing}
+    </div>
+  );
 }
 
 export default function Sidebar(props: SidebarProps) {
@@ -87,7 +113,7 @@ export default function Sidebar(props: SidebarProps) {
     const pPath = props.projectData()?.parentPath;
     if (!pPath) return '';
     const parts = pPath.split(/[/\\]/).filter(Boolean);
-    return parts.length > 0 ? parts[parts.length - 1] : 'Parent';
+    return parts.length > 0 ? parts[parts.length - 1] : 'parent';
   };
 
   const getActiveRepoDocs = (): DocTreeEntry[] => {
@@ -95,6 +121,12 @@ export default function Sidebar(props: SidebarProps) {
     const repoNode = props.tree().find(r => r.repoPath === props.activeRepoPath());
     const docsCat = repoNode?.children?.find(c => c.categoryType === 'docs');
     return (docsCat?.children as DocTreeEntry[]) || [];
+  };
+
+  const getFieldOptionColors = (fieldName: string): Record<string, string> | undefined => {
+    const repoNode = props.tree().find(r => r.repoPath === props.activeRepoPath());
+    const field = repoNode?.config?.frontmatterSchema?.find(f => f.name.trim().toLowerCase() === fieldName);
+    return field?.optionColors;
   };
 
   const filteredAndSortedTickets = (): TicketSummary[] => {
@@ -129,123 +161,187 @@ export default function Sidebar(props: SidebarProps) {
   return (
     <div
       style={{
-        width: '360px',
-        'border-right': '1px solid #e2e8f0',
-        background: '#f8fafc',
+        width: '340px',
+        'border-right': `1px solid ${colors.border}`,
+        background: colors.paperDim,
         display: 'flex',
         'flex-direction': 'column',
         height: '100vh',
+        'min-width': '280px',
         overflow: 'hidden'
       }}
     >
-      {/* 1. TOP HEADER: Branding & Dropdowns */}
-      <div style={{ padding: '10px 14px', 'border-bottom': '1px solid #e2e8f0', 'flex-shrink': 0, background: '#ffffff' }}>
-        <div style={{ display: 'flex', 'justify-content': 'space-between', 'align-items': 'center' }}>
-          <div style={{ display: 'flex', 'align-items': 'center', gap: '6px' }}>
-            <span style={{ 'font-size': '1.2rem' }}>👁️</span>
-            <span style={{ 'font-weight': '800', 'font-size': '1.05rem', color: '#0f172a' }}>Overseer</span>
-          </div>
-          <div style={{ display: 'flex', gap: '4px' }}>
-            <button
-              onClick={props.onAddRepoClick}
-              title="Register Repository"
+      {/* HEADER: brand + repo switcher */}
+      <div style={{ padding: '16px 16px 14px', 'flex-shrink': 0 }}>
+        <div style={{ display: 'flex', 'justify-content': 'space-between', 'align-items': 'center', 'margin-bottom': '14px' }}>
+          <div style={{ display: 'flex', 'align-items': 'center', gap: '9px' }}>
+            <div
               style={{
-                background: '#2563eb',
-                color: '#fff',
-                border: 'none',
-                padding: '3px 8px',
-                'border-radius': '4px',
-                cursor: 'pointer',
-                'font-size': '0.75rem',
-                'font-weight': '600'
+                width: '26px',
+                height: '26px',
+                'border-radius': '50%',
+                border: `1.5px solid ${colors.bronze}`,
+                display: 'flex',
+                'align-items': 'center',
+                'justify-content': 'center',
+                color: colors.blue,
+                'flex-shrink': 0
               }}
             >
-              + Repo
-            </button>
-            <Show when={props.activeRepoPath()}>
-              <button
-                onClick={() => {
-                  const repoNode = props.tree().find(r => r.repoPath === props.activeRepoPath());
-                  if (repoNode) props.onOpenRepoConfigModal(repoNode);
-                }}
-                title="Configure Repo"
-                style={{
-                  background: '#e2e8f0',
-                  border: 'none',
-                  padding: '3px 8px',
-                  'border-radius': '4px',
-                  cursor: 'pointer',
-                  'font-size': '0.8rem'
-                }}
-              >
-                ⚙️
-              </button>
-            </Show>
+              <Icon name="eye" size={13} />
+            </div>
+            <span style={{ 'font-family': font.display, 'font-weight': 600, 'font-size': '1.18rem', color: colors.ink }}>Overseer</span>
           </div>
-        </div>
-
-        {/* Repo Selector */}
-        <div style={{ display: 'flex', gap: '6px', 'margin-top': '8px' }}>
-          <Show when={props.tree().length > 1}>
-            <select
-              value={props.activeRepoPath() || ''}
-              onChange={e => props.onSelectRepo(e.currentTarget.value)}
-              style={{
-                flex: 1,
-                padding: '4px 6px',
-                border: '1px solid #cbd5e1',
-                'border-radius': '4px',
-                'font-size': '0.75rem',
-                background: '#fff'
-              }}
-            >
-              <For each={props.tree()}>{repo => <option value={repo.repoPath}>📦 {repo.name}</option>}</For>
-            </select>
-          </Show>
-        </div>
-      </div>
-
-      {/* 2. PROJECT HEADER & PARENT LINK */}
-      <div style={{ padding: '8px 14px', 'border-bottom': '1px solid #e2e8f0', 'flex-shrink': 0, background: '#f8fafc' }}>
-        {/* Parent Folder Link */}
-        <Show when={props.projectData()?.parentPath}>
-          <div
-            onClick={() => props.onNavigateProject(props.projectData()!.parentPath!)}
+          <button
+            onClick={props.onAddRepoClick}
+            title="Register a new repository"
             style={{
               display: 'flex',
               'align-items': 'center',
+              gap: '5px',
+              background: colors.bronzeTint,
+              color: colors.bronze,
+              border: `1px solid ${colors.borderStrong}`,
+              padding: '6px 10px',
+              'border-radius': '7px',
+              'font-family': font.sans,
+              'font-size': '0.76rem',
+              'font-weight': 600,
+              cursor: 'pointer',
+              'flex-shrink': 0
+            }}
+          >
+            <Icon name="plus" size={12} /> Repo
+          </button>
+        </div>
+
+        <Show when={props.activeRepoPath()}>
+          <div style={{ display: 'flex', 'align-items': 'center', gap: '6px' }}>
+            <div
+              style={{
+                flex: 1,
+                'min-width': 0,
+                display: 'flex',
+                'align-items': 'center',
+                gap: '7px',
+                border: `1px solid ${colors.borderStrong}`,
+                'border-radius': '8px',
+                padding: '6px 10px',
+                background: colors.paperCard
+              }}
+            >
+              <Icon name="box" size={13} style={{ color: colors.bronze }} />
+              <Show
+                when={props.tree().length > 1}
+                fallback={
+                  <span
+                    style={{
+                      flex: 1,
+                      'font-family': font.sans,
+                      'font-size': '0.84rem',
+                      'font-weight': 600,
+                      color: colors.ink,
+                      overflow: 'hidden',
+                      'text-overflow': 'ellipsis',
+                      'white-space': 'nowrap'
+                    }}
+                  >
+                    {props.tree().find(r => r.repoPath === props.activeRepoPath())?.name}
+                  </span>
+                }
+              >
+                <select
+                  value={props.activeRepoPath() || ''}
+                  onChange={e => props.onSelectRepo(e.currentTarget.value)}
+                  style={{
+                    flex: 1,
+                    'min-width': 0,
+                    border: 'none',
+                    background: 'transparent',
+                    appearance: 'none',
+                    'font-family': font.sans,
+                    'font-size': '0.84rem',
+                    'font-weight': 600,
+                    color: colors.ink,
+                    outline: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <For each={props.tree()}>{repo => <option value={repo.repoPath}>{repo.name}</option>}</For>
+                </select>
+                <Icon name="chevronDown" size={12} style={{ color: colors.inkFaint }} />
+              </Show>
+            </div>
+            <button
+              onClick={() => {
+                const repoNode = props.tree().find(r => r.repoPath === props.activeRepoPath());
+                if (repoNode) props.onOpenRepoConfigModal(repoNode);
+              }}
+              title="Repository settings"
+              style={{
+                display: 'flex',
+                'align-items': 'center',
+                'justify-content': 'center',
+                background: colors.paperCard,
+                color: colors.inkSoft,
+                border: `1px solid ${colors.borderStrong}`,
+                width: '32px',
+                height: '32px',
+                'border-radius': '8px',
+                cursor: 'pointer',
+                'flex-shrink': 0
+              }}
+            >
+              <Icon name="gear" size={14} />
+            </button>
+          </div>
+        </Show>
+      </div>
+
+      {/* PROJECT HEADER */}
+      <div style={{ padding: '0 16px 12px', 'flex-shrink': 0 }}>
+        <Show when={props.projectData()?.parentPath}>
+          <div
+            onClick={() => props.onNavigateProject(props.projectData()!.parentPath!)}
+            title={`Return to parent: ${getParentFolderName()}`}
+            style={{
+              display: 'inline-flex',
+              'align-items': 'center',
               gap: '6px',
               cursor: 'pointer',
-              color: '#2563eb',
-              'font-size': '0.8rem',
-              'font-weight': '600',
-              'margin-bottom': '4px'
+              color: colors.inkSoft,
+              'font-family': font.sans,
+              'font-size': '0.76rem',
+              'font-weight': 600,
+              padding: '4px 10px',
+              'border-radius': '999px',
+              border: `1px solid ${colors.border}`,
+              'margin-bottom': '10px'
             }}
-            title={`Return to parent: ${getParentFolderName()}`}
           >
-            <span>↰ ..</span>
-            <span style={{ 'text-decoration': 'underline' }}>{getParentFolderName()}</span>
+            <Icon name="cornerUpLeft" size={12} />
+            Up to {getParentFolderName()}
           </div>
         </Show>
 
-        {/* Project Title (Clickable for Overview) + Single +Add Button */}
         <div style={{ display: 'flex', 'align-items': 'center', 'justify-content': 'space-between', gap: '8px' }}>
           <h3
             onClick={() => props.onOpenProjectDescription()}
+            title={`Open project overview: ${props.projectData()?.manifest.name || ''}`}
             style={{
               margin: 0,
-              color: props.activeFilePath()?.endsWith('_project.md') ? '#2563eb' : '#0f172a',
-              'font-size': '1.05rem',
+              'font-family': font.display,
+              'font-weight': 600,
+              'font-size': '1.15rem',
+              color: props.activeFilePath()?.endsWith('_project.md') ? colors.blue : colors.ink,
               overflow: 'hidden',
               'text-overflow': 'ellipsis',
               'white-space': 'nowrap',
               flex: 1,
-              cursor: 'pointer',
-              'text-decoration': props.activeFilePath()?.endsWith('_project.md') ? 'underline' : 'none'
+              cursor: 'pointer'
             }}
-            title={`Click to open project overview: ${props.projectData()?.manifest.name}`}
           >
-            {props.projectData()?.manifest.name || 'Select Project'}
+            {props.projectData()?.manifest.name || 'Select a project'}
           </h3>
           <button
             onClick={() => {
@@ -253,313 +349,217 @@ export default function Sidebar(props: SidebarProps) {
               const repoPath = props.activeRepoPath();
               if (projectPath && repoPath) props.onOpenCreateModal(projectPath, repoPath);
             }}
-            title="Add Ticket or Sub-Project"
+            title="Add ticket or sub-project"
             style={{
-              background: '#16a34a',
-              color: '#fff',
+              display: 'flex',
+              'align-items': 'center',
+              gap: '5px',
+              background: colors.blue,
+              color: colors.paperCard,
               border: 'none',
-              padding: '3px 10px',
-              'border-radius': '4px',
+              padding: '6px 12px',
+              'border-radius': '7px',
+              'font-family': font.sans,
+              'font-size': '0.76rem',
+              'font-weight': 600,
               cursor: 'pointer',
-              'font-size': '0.75rem',
-              'font-weight': '600',
               'flex-shrink': 0
             }}
           >
-            + Add
+            <Icon name="plus" size={12} /> Add
           </button>
         </div>
       </div>
 
-      {/* 3. COLLAPSIBLE PANELS (Sub-Projects, Tickets, Docs) */}
-      <div style={{ flex: 1, 'min-height': 0, 'overflow-y': 'auto', padding: '8px 10px', display: 'flex', 'flex-direction': 'column', gap: '8px' }}>
-        {/* PANEL 1: Sub-Projects */}
+      {/* SECTIONS */}
+      <div style={{ flex: 1, 'min-height': 0, 'overflow-y': 'auto', padding: '2px 14px 16px', display: 'flex', 'flex-direction': 'column' }}>
+        {/* Sub-Projects */}
         <Show when={(props.projectData()?.manifest.projectmap.subprojects || []).length > 0}>
-          <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', 'border-radius': '6px', overflow: 'hidden' }}>
-            <div
-              onClick={() => togglePanel('subprojects')}
-              style={{
-                display: 'flex',
-                'align-items': 'center',
-                'justify-content': 'space-between',
-                padding: '6px 8px',
-                background: '#f8fafc',
-                cursor: 'pointer',
-                'user-select': 'none',
-                'border-bottom': isSubprojectsOpen() ? '1px solid #e2e8f0' : 'none'
-              }}
-            >
-              <span style={{ 'font-size': '0.75rem', 'font-weight': '700', color: '#475569' }}>
-                📁 Sub-Projects ({props.projectData()?.manifest.projectmap.subprojects.length})
-              </span>
-              <span style={{ 'font-size': '0.7rem', color: '#64748b' }}>{isSubprojectsOpen() ? '▼' : '▶'}</span>
+          <SectionHeader
+            icon="folder"
+            label="Sub-projects"
+            count={props.projectData()?.manifest.projectmap.subprojects.length || 0}
+            open={isSubprojectsOpen()}
+            onToggle={() => togglePanel('subprojects')}
+          />
+          <Show when={isSubprojectsOpen()}>
+            <div style={{ display: 'flex', 'flex-direction': 'column', gap: '1px', 'margin-bottom': '6px' }}>
+              <For each={props.projectData()?.manifest.projectmap.subprojects}>
+                {sub => (
+                  <ListRow
+                    icon={<Icon name="folder" size={14} style={{ color: colors.bronze }} />}
+                    label={sub.name}
+                    title={sub.name}
+                    onClick={() => props.onNavigateProject(sub.path)}
+                    trailing={<Icon name="chevronRight" size={13} style={{ color: colors.inkFaint }} />}
+                  />
+                )}
+              </For>
             </div>
-            <Show when={isSubprojectsOpen()}>
-              <div style={{ padding: '4px', display: 'flex', 'flex-direction': 'column', gap: '2px' }}>
-                <For each={props.projectData()?.manifest.projectmap.subprojects}>
-                  {sub => (
-                    <div
-                      onClick={() => props.onNavigateProject(sub.path)}
-                      style={{
-                        display: 'flex',
-                        'align-items': 'center',
-                        gap: '6px',
-                        padding: '4px 6px',
-                        'border-radius': '4px',
-                        cursor: 'pointer',
-                        'font-size': '0.82rem',
-                        color: '#1e293b',
-                        'white-space': 'nowrap',
-                        overflow: 'hidden',
-                        'text-overflow': 'ellipsis'
-                      }}
-                      title={sub.name}
-                      onMouseEnter={e => (e.currentTarget.style.background = '#f1f5f9')}
-                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                    >
-                      <span>📁</span>
-                      <span style={{ 'font-weight': '600', overflow: 'hidden', 'text-overflow': 'ellipsis' }}>
-                        {sub.name}
-                      </span>
-                      <span style={{ 'margin-left': 'auto', color: '#94a3b8', 'font-size': '0.75rem' }}>→</span>
-                    </div>
-                  )}
+          </Show>
+          <div style={{ height: '1px', background: colors.border, margin: '8px 2px 12px' }} />
+        </Show>
+
+        {/* Tickets */}
+        <SectionHeader
+          icon="ticket"
+          label="Tickets"
+          count={filteredAndSortedTickets().length}
+          open={isTicketsOpen()}
+          onToggle={() => togglePanel('tickets')}
+        />
+        <Show when={isTicketsOpen()}>
+          <div style={{ padding: '6px 2px 2px' }}>
+            <Show when={(props.projectData()?.manifest.projectmap.tickets || []).length > 0}>
+              <div style={{ display: 'flex', gap: '6px', 'align-items': 'center', 'margin-bottom': '8px' }}>
+                <div
+                  style={{
+                    flex: 1,
+                    'min-width': 0,
+                    display: 'flex',
+                    'align-items': 'center',
+                    gap: '6px',
+                    padding: '5px 9px',
+                    border: `1px solid ${colors.border}`,
+                    'border-radius': '7px',
+                    background: colors.paperCard
+                  }}
+                >
+                  <Icon name="search" size={12} style={{ color: colors.inkFaint }} />
+                  <input
+                    type="text"
+                    placeholder="Filter tickets"
+                    value={ticketSearch()}
+                    onInput={e => setTicketSearch(e.currentTarget.value)}
+                    style={{
+                      flex: 1,
+                      'min-width': 0,
+                      border: 'none',
+                      background: 'transparent',
+                      outline: 'none',
+                      'font-family': font.sans,
+                      'font-size': '0.78rem',
+                      color: colors.ink
+                    }}
+                  />
+                </div>
+                <select
+                  value={sortOption()}
+                  onChange={e => handleSortChange(e.currentTarget.value as any)}
+                  style={{
+                    'font-family': font.sans,
+                    'font-size': '0.74rem',
+                    border: `1px solid ${colors.border}`,
+                    'border-radius': '7px',
+                    padding: '5px 6px',
+                    background: colors.paperCard,
+                    color: colors.inkSoft,
+                    'flex-shrink': 0,
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="manifest">Default</option>
+                  <option value="status">Status</option>
+                  <option value="name">Name</option>
+                  <option value="id">ID</option>
+                </select>
+              </div>
+            </Show>
+
+            <Show
+              when={filteredAndSortedTickets().length > 0}
+              fallback={
+                <div style={{ color: colors.inkFaint, 'font-family': font.sans, 'font-size': '0.8rem', 'text-align': 'center', padding: '14px 0' }}>
+                  No tickets yet.
+                </div>
+              }
+            >
+              <div style={{ display: 'flex', 'flex-direction': 'column', gap: '1px' }}>
+                <For each={filteredAndSortedTickets()}>
+                  {(ticket: TicketSummary) => {
+                    const isSelected = props.activeFilePath() === ticket.filePath;
+                    const statusStyle = getStatusBadgeStyle(ticket.status, getFieldOptionColors('status'));
+                    const typeStyle = getTypeBadgeStyle(ticket.type, getFieldOptionColors('type'));
+
+                    return (
+                      <ListRow
+                        selected={isSelected}
+                        onClick={() => props.onOpenFile(ticket.filePath, props.activeRepoPath()!)}
+                        title={`#${ticket.id}: ${ticket.name}`}
+                        icon={
+                          <span
+                            style={{
+                              'font-size': '0.68rem',
+                              'font-family': font.mono,
+                              'font-weight': 500,
+                              color: isSelected ? colors.blue : colors.inkFaint,
+                              'flex-shrink': 0
+                            }}
+                          >
+                            #{ticket.id}
+                          </span>
+                        }
+                        label={ticket.name}
+                        trailing={
+                          <div style={{ display: 'flex', gap: '5px', 'align-items': 'center', 'flex-shrink': 0 }}>
+                            <Show when={ticket.type}>
+                              <span
+                                style={{
+                                  'font-size': '0.64rem',
+                                  background: typeStyle.bg,
+                                  color: typeStyle.text,
+                                  padding: '1px 6px',
+                                  'border-radius': '3px',
+                                  'font-weight': 600
+                                }}
+                              >
+                                {ticket.type}
+                              </span>
+                            </Show>
+                            <Show when={ticket.status}>
+                              <span
+                                style={{
+                                  'font-size': '0.64rem',
+                                  background: statusStyle.bg,
+                                  color: statusStyle.text,
+                                  padding: '1px 6px',
+                                  'border-radius': '999px',
+                                  'font-weight': 600
+                                }}
+                              >
+                                {ticket.status}
+                              </span>
+                            </Show>
+                          </div>
+                        }
+                      />
+                    );
+                  }}
                 </For>
               </div>
             </Show>
           </div>
         </Show>
 
-        {/* PANEL 2: Tickets */}
-        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', 'border-radius': '6px', overflow: 'hidden' }}>
-          <div
-            onClick={() => togglePanel('tickets')}
-            style={{
-              display: 'flex',
-              'align-items': 'center',
-              'justify-content': 'space-between',
-              padding: '6px 8px',
-              background: '#f8fafc',
-              cursor: 'pointer',
-              'user-select': 'none',
-              'border-bottom': isTicketsOpen() ? '1px solid #e2e8f0' : 'none'
-            }}
-          >
-            <span style={{ 'font-size': '0.75rem', 'font-weight': '700', color: '#475569' }}>
-              📋 Tickets ({filteredAndSortedTickets().length})
-            </span>
-            <span style={{ 'font-size': '0.7rem', color: '#64748b' }}>{isTicketsOpen() ? '▼' : '▶'}</span>
+        <div style={{ height: '1px', background: colors.border, margin: '12px 2px' }} />
+
+        {/* Documentation */}
+        <SectionHeader icon="book" label="Documentation" count={getActiveRepoDocs().length} open={isDocsOpen()} onToggle={() => togglePanel('docs')} />
+        <Show when={isDocsOpen()}>
+          <div style={{ display: 'flex', 'flex-direction': 'column', gap: '1px', 'margin-top': '6px' }}>
+            <For each={getActiveRepoDocs()}>
+              {doc => (
+                <ListRow
+                  icon={<Icon name="file" size={14} style={{ color: colors.inkSoft }} />}
+                  label={doc.name}
+                  title={doc.name}
+                  selected={props.activeFilePath() === doc.path}
+                  onClick={() => props.onOpenFile(doc.path, props.activeRepoPath()!)}
+                />
+              )}
+            </For>
           </div>
-
-          <Show when={isTicketsOpen()}>
-            <div style={{ padding: '4px' }}>
-              <Show when={(props.projectData()?.manifest.projectmap.tickets || []).length > 0}>
-                <div style={{ display: 'flex', gap: '4px', 'align-items': 'center', 'margin-bottom': '4px', padding: '2px' }}>
-                  <input
-                    type="text"
-                    placeholder="Filter tickets..."
-                    value={ticketSearch()}
-                    onInput={e => setTicketSearch(e.currentTarget.value)}
-                    style={{
-                      flex: 1,
-                      'min-width': '0',
-                      padding: '3px 6px',
-                      border: '1px solid #cbd5e1',
-                      'border-radius': '4px',
-                      'font-size': '0.75rem',
-                      'box-sizing': 'border-box'
-                    }}
-                  />
-                  <select
-                    value={sortOption()}
-                    onChange={e => handleSortChange(e.currentTarget.value as any)}
-                    style={{
-                      'font-size': '0.72rem',
-                      border: '1px solid #cbd5e1',
-                      'border-radius': '4px',
-                      padding: '2px 4px',
-                      background: '#fff',
-                      color: '#475569',
-                      'flex-shrink': 0,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <option value="manifest">Default</option>
-                    <option value="status">Status</option>
-                    <option value="name">Name</option>
-                    <option value="id">ID</option>
-                  </select>
-                </div>
-              </Show>
-
-              <Show
-                when={filteredAndSortedTickets().length > 0}
-                fallback={
-                  <div style={{ color: '#94a3b8', 'font-size': '0.8rem', 'text-align': 'center', padding: '12px 0' }}>
-                    No tickets yet.
-                  </div>
-                }
-              >
-                <div style={{ display: 'flex', 'flex-direction': 'column', gap: '2px' }}>
-                  <For each={filteredAndSortedTickets()}>
-                    {(ticket: TicketSummary) => {
-                      const isSelected = props.activeFilePath() === ticket.filePath;
-                      const statusStyle = getStatusBadgeStyle(ticket.status);
-                      const typeStyle = getTypeBadgeStyle(ticket.type);
-
-                      return (
-                        <div
-                          onClick={() => props.onOpenFile(ticket.filePath, props.activeRepoPath()!)}
-                          style={{
-                            display: 'flex',
-                            'align-items': 'center',
-                            gap: '6px',
-                            padding: '4px 6px',
-                            'border-radius': '4px',
-                            cursor: 'pointer',
-                            background: isSelected ? '#eff6ff' : 'transparent',
-                            color: isSelected ? '#1d4ed8' : '#334155',
-                            'font-weight': isSelected ? '600' : 'normal',
-                            'font-size': '0.82rem',
-                            'white-space': 'nowrap',
-                            overflow: 'hidden'
-                          }}
-                          title={`${ticket.id ? '#' + ticket.id + ': ' : ''}${ticket.name}`}
-                          onMouseEnter={e => {
-                            if (!isSelected) e.currentTarget.style.background = '#f1f5f9';
-                          }}
-                          onMouseLeave={e => {
-                            if (!isSelected) e.currentTarget.style.background = 'transparent';
-                          }}
-                        >
-                          {/* 1. ID */}
-                          <span
-                            style={{
-                              'font-size': '0.7rem',
-                              'font-family': 'monospace',
-                              'font-weight': '700',
-                              color: isSelected ? '#1d4ed8' : '#64748b',
-                              'flex-shrink': 0
-                            }}
-                          >
-                            #{ticket.id}
-                          </span>
-
-                          {/* 2. Status */}
-                          <Show when={ticket.status}>
-                            <span
-                              style={{
-                                'font-size': '0.65rem',
-                                background: statusStyle.bg,
-                                color: statusStyle.text,
-                                padding: '0 4px',
-                                'border-radius': '3px',
-                                'font-weight': '600',
-                                'flex-shrink': 0
-                              }}
-                            >
-                              {ticket.status}
-                            </span>
-                          </Show>
-
-                          {/* 3. Name with ellipsis */}
-                          <span
-                            style={{
-                              overflow: 'hidden',
-                              'text-overflow': 'ellipsis',
-                              'white-space': 'nowrap',
-                              flex: 1
-                            }}
-                          >
-                            {ticket.name}
-                          </span>
-
-                          {/* 4. Type on far right */}
-                          <Show when={ticket.type}>
-                            <span
-                              style={{
-                                'font-size': '0.65rem',
-                                background: typeStyle.bg,
-                                color: typeStyle.text,
-                                padding: '0 4px',
-                                'border-radius': '3px',
-                                'font-weight': '600',
-                                'flex-shrink': 0,
-                                'margin-left': 'auto'
-                              }}
-                            >
-                              {ticket.type}
-                            </span>
-                          </Show>
-                        </div>
-                      );
-                    }}
-                  </For>
-                </div>
-              </Show>
-            </div>
-          </Show>
-        </div>
-
-        {/* PANEL 3: Documentation */}
-        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', 'border-radius': '6px', overflow: 'hidden' }}>
-          <div
-            onClick={() => togglePanel('docs')}
-            style={{
-              display: 'flex',
-              'align-items': 'center',
-              'justify-content': 'space-between',
-              padding: '6px 8px',
-              background: '#f8fafc',
-              cursor: 'pointer',
-              'user-select': 'none',
-              'border-bottom': isDocsOpen() ? '1px solid #e2e8f0' : 'none'
-            }}
-          >
-            <span style={{ 'font-size': '0.75rem', 'font-weight': '700', color: '#475569' }}>
-              📚 Documentation ({getActiveRepoDocs().length})
-            </span>
-            <span style={{ 'font-size': '0.7rem', color: '#64748b' }}>{isDocsOpen() ? '▼' : '▶'}</span>
-          </div>
-          <Show when={isDocsOpen()}>
-            <div style={{ padding: '4px', display: 'flex', 'flex-direction': 'column', gap: '2px' }}>
-              <For each={getActiveRepoDocs()}>
-                {doc => (
-                  <div
-                    onClick={() => props.onOpenFile(doc.path, props.activeRepoPath()!)}
-                    style={{
-                      padding: '4px 6px',
-                      'border-radius': '4px',
-                      background: props.activeFilePath() === doc.path ? '#eff6ff' : 'transparent',
-                      color: props.activeFilePath() === doc.path ? '#2563eb' : '#475569',
-                      'font-size': '0.8rem',
-                      cursor: 'pointer',
-                      'font-weight': props.activeFilePath() === doc.path ? '700' : 'normal',
-                      'white-space': 'nowrap',
-                      overflow: 'hidden',
-                      'text-overflow': 'ellipsis',
-                      display: 'flex',
-                      'align-items': 'center',
-                      gap: '6px'
-                    }}
-                    title={doc.name}
-                    onMouseEnter={e => {
-                      if (props.activeFilePath() !== doc.path) e.currentTarget.style.background = '#f8fafc';
-                    }}
-                    onMouseLeave={e => {
-                      if (props.activeFilePath() !== doc.path) e.currentTarget.style.background = 'transparent';
-                    }}
-                  >
-                    <span style={{ 'flex-shrink': 0 }}>📄</span>
-                    <span style={{ overflow: 'hidden', 'text-overflow': 'ellipsis', 'white-space': 'nowrap' }}>
-                      {doc.name}
-                    </span>
-                  </div>
-                )}
-              </For>
-            </div>
-          </Show>
-        </div>
+        </Show>
       </div>
     </div>
   );

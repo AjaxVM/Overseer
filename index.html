@@ -4,8 +4,25 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Overseer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
     <style>
-      body { margin: 0; font-family: system-ui, sans-serif; background: #fdfdfc; color: #1a1a1a; }
+      body { margin: 0; background: #faf6ea; color: #1e2a38; }
+
+      /* Ticket/doc markdown preview - inline JS styles can't reach content marked.js
+         injects via innerHTML, so these few rules live here. Keep in sync with the
+         color tokens in src/frontend/theme.ts if the palette changes. */
+      .md-preview a { color: #1F3F63; }
+      .md-preview a:hover { color: #2C5580; }
+      .md-preview code { background: #F5EEDA; padding: 2px 5px; border-radius: 4px; font-family: 'IBM Plex Mono', monospace; font-size: 0.88em; }
+      .md-preview pre { background: #F5EEDA; padding: 12px 14px; border-radius: 8px; overflow-x: auto; }
+      .md-preview pre code { background: transparent; padding: 0; }
+      .md-preview blockquote { margin: 0; padding: 2px 14px; border-left: 3px solid #7F6B41; color: #48586B; }
+      .md-preview hr { border: none; border-top: 1px solid #998254; }
     </style>
   </head>
   <body>

@@ -8,6 +8,7 @@ import type {
 import Sidebar from './Sidebar';
 import Workspace from './Workspace';
 import { AddRepoModal, CreateItemModal, RepoConfigModal } from './Modals';
+import { font } from './theme';
 
 function findActiveTicketDetails(filePath: string, items: FrontmatterItem[], body: string): [string, string] {
   const [_id, ...nameParts] = (filePath.split(/[/\\]/).pop() || '').split('-');
@@ -30,7 +31,6 @@ export default function App() {
   const [isModalOpen, setIsModalOpen] = createSignal(false);
   const [selectedRepoPath, setSelectedRepoPath] = createSignal('');
   const [errorMsg, setErrorMsg] = createSignal('');
-  const [isBrowsing, setIsBrowsing] = createSignal(false);
 
   // Active Project & Scoped Navigation (with localStorage persistence)
   const [activeRepoPath, setActiveRepoPath] = createSignal<string | null>(localStorage.getItem('overseer:activeRepo'));
@@ -47,6 +47,10 @@ export default function App() {
   const [isSaving, setIsSaving] = createSignal(false);
   const [saveStatus, setSaveStatus] = createSignal('');
 
+  // Snapshot of the last loaded/saved content, to detect unsaved edits (poc-3).
+  const [originalAttributes, setOriginalAttributes] = createSignal<FrontmatterItem[]>([]);
+  const [originalMarkdownBody, setOriginalMarkdownBody] = createSignal('');
+
   // Repo Settings Modal
   const [isConfigModalOpen, setIsConfigModalOpen] = createSignal(false);
   const [configRepoPath, setConfigRepoPath] = createSignal('');
@@ -62,16 +66,31 @@ export default function App() {
   const [createName, setCreateName] = createSignal('');
   const [createErrorMsg, setCreateErrorMsg] = createSignal('');
 
+  // Compares current edit-buffer contents against the last loaded/saved snapshot.
+  const isDirty = () =>
+    markdownBody() !== originalMarkdownBody() || JSON.stringify(attributes()) !== JSON.stringify(originalAttributes());
+
+  // Every navigation that would overwrite the edit buffer (opening a different
+  // ticket/doc, or the project overview) goes through this first.
+  const confirmDiscardIfDirty = () => {
+    if (!activeFilePath() || !isDirty()) return true;
+    return window.confirm('You have unsaved changes. Discard them and continue?');
+  };
+
   const handleOpenProjectDescription = (overrideData?: ProjectDetailsResponse) => {
     const pData = overrideData || projectData();
     const pPath = overrideData?.path || activeProjectPath();
     if (!pPath || !pData) return;
+    if (!confirmDiscardIfDirty()) return;
     const descFilePath = `${pPath}/_project.md`;
+    const description = pData.description || `# ${pData.manifest.name}\n\nProject overview and goals...`;
     setActiveFilePath(descFilePath);
     setActiveTicketId('PROJECT');
     setActiveTicketName(`${pData.manifest.name} Overview`);
     setAttributes([]);
-    setMarkdownBody(pData.description || `# ${pData.manifest.name}\n\nProject overview and goals...`);
+    setOriginalAttributes([]);
+    setMarkdownBody(description);
+    setOriginalMarkdownBody(description);
     setActiveTab('preview');
     setSaveStatus('');
   };
@@ -142,6 +161,15 @@ export default function App() {
     }
   });
 
+  // Warn on closing/reloading the tab with unsaved edits (poc-3). In-app navigation
+  // between tickets/docs is covered separately by confirmDiscardIfDirty.
+  window.addEventListener('beforeunload', e => {
+    if (isDirty()) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  });
+
   // Selecting a repo always lands on its projects root, not a sub-project - tickets
   // can live directly at that root, so drilling into the first sub-project would hide them.
   const handleSelectRepo = (repoPath: string) => {
@@ -158,6 +186,7 @@ export default function App() {
   };
 
   const handleOpenFile = async (filePath: string, repoPath: string) => {
+    if (!confirmDiscardIfDirty()) return;
     setActiveFilePath(filePath);
     setActiveRepoPath(repoPath);
     setActiveTab('preview');
@@ -173,7 +202,9 @@ export default function App() {
       }));
 
       setAttributes(items);
+      setOriginalAttributes(items);
       setMarkdownBody(data.body || '');
+      setOriginalMarkdownBody(data.body || '');
       const [id, name] = findActiveTicketDetails(filePath, items, data.body || '');
       setActiveTicketId(id);
       setActiveTicketName(name);
@@ -204,6 +235,8 @@ export default function App() {
       });
       if (!res.ok) throw new Error('Save failed');
       setSaveStatus('Saved successfully');
+      setOriginalAttributes(attributes());
+      setOriginalMarkdownBody(markdownBody());
 
       if (activeProjectPath()) {
         loadProject(activeProjectPath()!, activeRepoPath() || undefined);
@@ -283,7 +316,8 @@ export default function App() {
                 .split(',')
                 .map(s => s.trim())
                 .filter(Boolean)
-            : undefined
+            : undefined,
+        optionColors: field.type === 'enum' ? field.optionColors : undefined
       }))
       .filter(f => f.name.length > 0);
 
@@ -303,21 +337,6 @@ export default function App() {
       fetchTree();
     } catch (err: any) {
       alert(err.message);
-    }
-  };
-
-  const handleBrowseNativeFolder = async () => {
-    setIsBrowsing(true);
-    setErrorMsg('');
-    try {
-      const res = await fetch('/api/dialog/pick-folder', { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Folder selection cancelled');
-      setSelectedRepoPath(data.folderPath);
-    } catch (err: any) {
-      setErrorMsg(err.message);
-    } finally {
-      setIsBrowsing(false);
     }
   };
 
@@ -342,7 +361,7 @@ export default function App() {
   };
 
   return (
-    <div style={{ display: 'flex', height: '100vh', 'font-family': 'system-ui, -apple-system, sans-serif' }}>
+    <div style={{ display: 'flex', height: '100vh', 'font-family': font.sans }}>
       <Sidebar
         tree={tree}
         activeRepoPath={activeRepoPath}
@@ -379,8 +398,6 @@ export default function App() {
         onClose={() => setIsModalOpen(false)}
         selectedRepoPath={selectedRepoPath}
         setSelectedRepoPath={setSelectedRepoPath}
-        isBrowsing={isBrowsing}
-        onBrowse={handleBrowseNativeFolder}
         errorMsg={errorMsg}
         onSubmit={handleAddProject}
       />

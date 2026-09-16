@@ -8,6 +8,10 @@ export interface FrontmatterFieldConfig {
   name: string;
   type: 'string' | 'number' | 'enum';
   options?: string[];
+  // Maps an enum option value to a user-picked hex color - currently only read by
+  // the frontend for the built-in `status` field's badge coloring (see
+  // src/frontend/theme.ts's deriveBadgeStyle). Passed through as opaque data here.
+  optionColors?: Record<string, string>;
 }
 
 export interface RepoConfig {
@@ -24,12 +28,28 @@ export const DEFAULT_REPO_CONFIG: RepoConfig = {
     {
       name: 'status',
       type: 'enum',
-      options: ['idea', 'designing', 'planning', 'ready', 'working', 'reviewing', 'done']
+      options: ['idea', 'designing', 'planning', 'ready', 'working', 'reviewing', 'done'],
+      // Loosely follows the idea -> done lifecycle: cool/uncommitted colors early,
+      // warm/active colors in the middle, settling on green at done.
+      optionColors: {
+        idea: '#8B5CF6',
+        designing: '#EAB308',
+        planning: '#F97316',
+        ready: '#EC4899',
+        working: '#3B82F6',
+        reviewing: '#14B8A6',
+        done: '#22C55E'
+      }
     },
     {
       name: 'type',
       type: 'enum',
-      options: ['bug', 'feature',  'design']
+      options: ['bug', 'feature', 'design'],
+      optionColors: {
+        bug: '#EF4444',
+        feature: '#6366F1',
+        design: '#B45309'
+      }
     },
     {
       name: 'estimate',

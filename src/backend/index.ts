@@ -1,5 +1,7 @@
 import path from 'path';
 import { getOrInitOverseerGlobalConfig, getOrInitRepoConfig } from './config';
+import type { RepoConfig } from './config';
+import { loadOrTrueUpProject } from './manifest';
 import {
   handleGetProjects,
   handleGetProject,
@@ -10,8 +12,8 @@ import {
 import { handleGetFileRead, handlePostFileSave } from './routes/files';
 import {
   ensureRepoScaffold,
+  handleGetFsBrowse,
   handlePostConfigSave,
-  handlePostDialogPickFolder,
   handlePostProjectsAdd
 } from './routes/repos';
 import type { RouteContext } from './types';
@@ -35,11 +37,18 @@ export function overseer() {
           server.watcher.add(path.join(repoRoot, 'overseer.json'));
         });
 
+        // GET /api/project serves the cached manifest without touching disk beyond one
+        // JSON read (see routes/projects.ts) - this is what actually keeps that cache
+        // fresh, off the request path, so navigation is never blocked on a readdir/stat
+        // walk. Directories touched during the debounce window are queued and trued up
+        // just before the projects-update broadcast fires.
         let watcherTimeout: NodeJS.Timeout | null = null;
+        const pendingTrueUps = new Map<string, RepoConfig>();
+
         server.watcher.on('all', (_event: string, file: string) => {
           if (file.includes('.git') || file.includes('node_modules')) return;
 
-          const isTracked = Array.from(watchedRepoRoots).some(repoRoot => {
+          const matchedRepo = Array.from(watchedRepoRoots).find(repoRoot => {
             const repoConfig = getOrInitRepoConfig(repoRoot);
             return (
               file.startsWith(path.join(repoRoot, repoConfig.docsDir)) ||
@@ -47,13 +56,27 @@ export function overseer() {
               file === path.join(repoRoot, 'overseer.json')
             );
           });
+          if (!matchedRepo) return;
 
-          if (isTracked) {
-            if (watcherTimeout) clearTimeout(watcherTimeout);
-            watcherTimeout = setTimeout(() => {
-              server.ws.send({ type: 'custom', event: 'projects-update', file });
-            }, 150);
+          const repoConfig = getOrInitRepoConfig(matchedRepo);
+          const projectsRoot = path.join(matchedRepo, repoConfig.projectsDir);
+          if (file.startsWith(projectsRoot) && file !== projectsRoot) {
+            pendingTrueUps.set(path.dirname(file), repoConfig);
           }
+
+          if (watcherTimeout) clearTimeout(watcherTimeout);
+          watcherTimeout = setTimeout(() => {
+            for (const [dir, cfg] of pendingTrueUps) {
+              try {
+                loadOrTrueUpProject(dir, cfg);
+              } catch (e) {
+                // Best-effort background refresh - a live nav request still falls back
+                // to a synchronous true-up if nothing is cached yet for that directory.
+              }
+            }
+            pendingTrueUps.clear();
+            server.ws.send({ type: 'custom', event: 'projects-update', file });
+          }, 150);
         });
 
         server.middlewares.use((req: any, res: any, next: any) => {
@@ -67,7 +90,7 @@ export function overseer() {
           if (req.url === '/api/file/save' && req.method === 'POST') return handlePostFileSave(req, res);
           if (req.url === '/api/item/create' && req.method === 'POST') return handlePostItemCreate(ctx, req, res);
           if (req.url === '/api/config/save' && req.method === 'POST') return handlePostConfigSave(ctx, req, res);
-          if (req.url === '/api/dialog/pick-folder' && req.method === 'POST') return handlePostDialogPickFolder(req, res);
+          if (req.url.startsWith('/api/fs/browse') && req.method === 'GET') return handleGetFsBrowse(req, res);
           if (req.url === '/api/projects/add' && req.method === 'POST') return handlePostProjectsAdd(ctx, req, res);
 
           next();

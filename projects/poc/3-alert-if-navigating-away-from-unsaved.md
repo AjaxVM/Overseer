@@ -1,6 +1,6 @@
 ---
 id: poc-3
-status: idea
+status: ready
 estimate: tiny
 complexity: simple
 priority: must

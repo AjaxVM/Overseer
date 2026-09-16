@@ -1,6 +1,8 @@
 import { For, Index, Show } from 'solid-js';
 import type { Accessor, Setter } from 'solid-js';
 import { marked } from 'marked';
+import Icon from './Icon';
+import { colors, font } from './theme';
 import type { FrontmatterItem, RepoTreeNode, SchemaField } from './types';
 
 marked.setOptions({
@@ -23,6 +25,31 @@ interface WorkspaceProps {
   isSaving: Accessor<boolean>;
   saveStatus: Accessor<string>;
   onSave: () => void;
+}
+
+function TabButton(props: { active: boolean; icon: 'eye' | 'pencil'; label: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={props.onClick}
+      style={{
+        display: 'flex',
+        'align-items': 'center',
+        gap: '6px',
+        padding: '9px 4px',
+        border: 'none',
+        'border-bottom': `2px solid ${props.active ? colors.blue : 'transparent'}`,
+        background: 'transparent',
+        color: props.active ? colors.blue : colors.inkSoft,
+        'font-family': font.sans,
+        'font-size': '0.86rem',
+        'font-weight': props.active ? 600 : 500,
+        cursor: 'pointer'
+      }}
+    >
+      <Icon name={props.icon} size={14} />
+      {props.label}
+    </button>
+  );
 }
 
 export default function Workspace(props: WorkspaceProps) {
@@ -54,19 +81,24 @@ export default function Workspace(props: WorkspaceProps) {
         flex: 1,
         display: 'flex',
         'flex-direction': 'column',
-        padding: '24px 32px',
-        background: '#ffffff',
-        'overflow-y': 'auto'
+        padding: '28px 36px',
+        background: colors.paper,
+        'overflow-y': 'auto',
+        'min-width': '0'
       }}
     >
       <Show
         when={props.activeFilePath()}
         fallback={
-          <div style={{ color: '#94a3b8', 'margin-top': '120px', 'text-align': 'center' }}>
-            <div style={{ 'font-size': '3rem', 'margin-bottom': '12px' }}>👁️</div>
-            <h3 style={{ margin: '0 0 8px 0', color: '#64748b' }}>No Item Selected</h3>
-            <p style={{ 'font-size': '0.9rem', color: '#94a3b8' }}>
-              Select a ticket, subproject, or project overview from the sidebar to view and edit.
+          <div style={{ color: colors.inkFaint, margin: 'auto', 'text-align': 'center', 'max-width': '360px' }}>
+            <div style={{ display: 'flex', 'justify-content': 'center', 'margin-bottom': '14px' }}>
+              <Icon name="eye" size={40} style={{ color: colors.borderStrong }} />
+            </div>
+            <h3 style={{ margin: '0 0 8px 0', 'font-family': font.display, 'font-weight': 600, 'font-size': '1.15rem', color: colors.inkSoft }}>
+              Nothing selected yet
+            </h3>
+            <p style={{ 'font-size': '0.88rem', color: colors.inkFaint, 'font-family': font.sans, 'line-height': '1.5' }}>
+              Pick a ticket, sub-project, or the project overview from the sidebar to view and edit it here.
             </p>
           </div>
         }
@@ -76,43 +108,67 @@ export default function Workspace(props: WorkspaceProps) {
           style={{
             display: 'flex',
             'justify-content': 'space-between',
-            'align-items': 'center',
-            'margin-bottom': '20px',
-            'padding-bottom': '16px',
-            'border-bottom': '1px solid #f1f5f9'
+            'align-items': 'flex-start',
+            gap: '16px',
+            'margin-bottom': '22px',
+            'padding-bottom': '18px',
+            'border-bottom': `1px solid ${colors.border}`
           }}
         >
-          <div style={{ 'max-width': '70%' }}>
-            <div style={{ display: 'flex', 'align-items': 'center', gap: '8px' }}>
+          <div style={{ 'min-width': 0 }}>
+            <div style={{ display: 'flex', 'align-items': 'center', gap: '9px' }}>
               <Show when={props.activeTicketId()}>
                 <span
                   style={{
-                    'font-size': '0.85rem',
-                    'font-family': 'monospace',
-                    'font-weight': '700',
-                    background: '#f1f5f9',
-                    color: '#475569',
-                    padding: '2px 8px',
-                    'border-radius': '4px'
+                    'font-size': '0.78rem',
+                    'font-family': font.mono,
+                    'font-weight': 500,
+                    background: colors.paperDim,
+                    color: colors.inkSoft,
+                    padding: '2px 9px',
+                    'border-radius': '999px',
+                    'flex-shrink': 0
                   }}
                 >
                   #{props.activeTicketId()}
                 </span>
               </Show>
-              <h2 style={{ margin: 0, color: '#0f172a' }}>{props.activeTicketName()}</h2>
+              <h2
+                style={{
+                  margin: 0,
+                  'font-family': font.display,
+                  'font-weight': 600,
+                  'font-size': '1.5rem',
+                  color: colors.ink,
+                  overflow: 'hidden',
+                  'text-overflow': 'ellipsis',
+                  'white-space': 'nowrap'
+                }}
+              >
+                {props.activeTicketName()}
+              </h2>
             </div>
-            <div style={{ 'font-size': '0.8rem', color: '#94a3b8', 'margin-top': '6px', 'word-break': 'break-all' }}>
+            <div
+              style={{
+                'font-size': '0.76rem',
+                'font-family': font.mono,
+                color: colors.inkFaint,
+                'margin-top': '7px',
+                'word-break': 'break-all'
+              }}
+            >
               {props.activeFilePath()}
             </div>
           </div>
 
           <Show when={props.activeTab() === 'edit'}>
-            <div style={{ display: 'flex', 'align-items': 'center', gap: '12px' }}>
+            <div style={{ display: 'flex', 'align-items': 'center', gap: '14px', 'flex-shrink': 0 }}>
               <Show when={props.saveStatus()}>
                 <span
                   style={{
-                    'font-size': '0.85rem',
-                    color: props.saveStatus().startsWith('Error') ? '#dc2626' : '#16a34a'
+                    'font-size': '0.82rem',
+                    'font-family': font.sans,
+                    color: props.saveStatus().startsWith('Error') ? colors.rust : colors.patina
                   }}
                 >
                   {props.saveStatus()}
@@ -122,51 +178,28 @@ export default function Workspace(props: WorkspaceProps) {
                 onClick={props.onSave}
                 disabled={props.isSaving()}
                 style={{
-                  background: '#16a34a',
-                  color: '#fff',
+                  background: colors.blue,
+                  color: colors.paperCard,
                   border: 'none',
-                  padding: '8px 20px',
-                  'border-radius': '6px',
-                  cursor: 'pointer',
-                  'font-weight': '600'
+                  padding: '9px 22px',
+                  'border-radius': '7px',
+                  cursor: props.isSaving() ? 'default' : 'pointer',
+                  'font-family': font.sans,
+                  'font-weight': 600,
+                  'font-size': '0.85rem',
+                  opacity: props.isSaving() ? 0.7 : 1
                 }}
               >
-                {props.isSaving() ? 'Saving...' : 'Save Changes'}
+                {props.isSaving() ? 'Saving…' : 'Save changes'}
               </button>
             </div>
           </Show>
         </div>
 
         {/* NAVIGATION TABS */}
-        <div style={{ display: 'flex', gap: '8px', 'border-bottom': '1px solid #e2e8f0', 'margin-bottom': '20px' }}>
-          <button
-            onClick={() => props.setActiveTab('preview')}
-            style={{
-              padding: '8px 16px',
-              border: 'none',
-              'border-bottom': props.activeTab() === 'preview' ? '2px solid #2563eb' : '2px solid transparent',
-              background: 'transparent',
-              color: props.activeTab() === 'preview' ? '#2563eb' : '#64748b',
-              'font-weight': props.activeTab() === 'preview' ? 'bold' : 'normal',
-              cursor: 'pointer'
-            }}
-          >
-            👁️ Preview
-          </button>
-          <button
-            onClick={() => props.setActiveTab('edit')}
-            style={{
-              padding: '8px 16px',
-              border: 'none',
-              'border-bottom': props.activeTab() === 'edit' ? '2px solid #2563eb' : '2px solid transparent',
-              background: 'transparent',
-              color: props.activeTab() === 'edit' ? '#2563eb' : '#64748b',
-              'font-weight': props.activeTab() === 'edit' ? 'bold' : 'normal',
-              cursor: 'pointer'
-            }}
-          >
-            ✏️ Edit
-          </button>
+        <div style={{ display: 'flex', gap: '18px', 'border-bottom': `1px solid ${colors.border}`, 'margin-bottom': '22px' }}>
+          <TabButton active={props.activeTab() === 'preview'} icon="eye" label="Preview" onClick={() => props.setActiveTab('preview')} />
+          <TabButton active={props.activeTab() === 'edit'} icon="pencil" label="Edit" onClick={() => props.setActiveTab('edit')} />
         </div>
 
         {/* TAB 1: PREVIEW */}
@@ -178,25 +211,28 @@ export default function Workspace(props: WorkspaceProps) {
                   display: 'flex',
                   'flex-wrap': 'wrap',
                   gap: '8px',
-                  'margin-bottom': '20px',
-                  background: '#f8fafc',
-                  padding: '12px',
-                  'border-radius': '8px',
-                  border: '1px solid #f1f5f9'
+                  'margin-bottom': '22px',
+                  background: colors.paperDim,
+                  padding: '12px 14px',
+                  'border-radius': '9px'
                 }}
               >
                 <For each={props.attributes()}>
                   {attr => (
                     <div
                       style={{
-                        background: '#e2e8f0',
-                        padding: '4px 10px',
-                        'border-radius': '16px',
-                        'font-size': '0.8rem',
-                        color: '#334155'
+                        background: colors.paperCard,
+                        border: `1px solid ${colors.border}`,
+                        padding: '4px 11px',
+                        'border-radius': '999px',
+                        'font-family': font.sans,
+                        'font-size': '0.78rem',
+                        color: colors.ink
                       }}
                     >
-                      <strong style={{ color: '#0f172a' }}>{attr.key}:</strong> {attr.val}
+                      <span style={{ color: colors.bronze, 'font-weight': 600 }}>{attr.key}</span>
+                      <span style={{ color: colors.inkFaint }}> · </span>
+                      {attr.val}
                     </div>
                   )}
                 </For>
@@ -204,8 +240,9 @@ export default function Workspace(props: WorkspaceProps) {
             </Show>
 
             <div
+              class="md-preview"
               innerHTML={marked.parse(props.markdownBody() || '') as string}
-              style={{ flex: 1, 'line-height': '1.6', color: '#1e293b', 'font-size': '1rem' }}
+              style={{ flex: 1, 'line-height': '1.65', color: colors.ink, 'font-family': font.sans, 'font-size': '1rem' }}
             />
           </div>
         </Show>
@@ -216,11 +253,10 @@ export default function Workspace(props: WorkspaceProps) {
             <Show when={!props.activeFilePath()?.endsWith('_project.md')}>
               <div
                 style={{
-                  background: '#f8fafc',
-                  border: '1px solid #e2e8f0',
-                  'border-radius': '8px',
+                  background: colors.paperDim,
+                  'border-radius': '9px',
                   padding: '16px',
-                  'margin-bottom': '20px'
+                  'margin-bottom': '22px'
                 }}
               >
                 <div
@@ -231,19 +267,27 @@ export default function Workspace(props: WorkspaceProps) {
                     'margin-bottom': '12px'
                   }}
                 >
-                  <h4 style={{ margin: 0, color: '#334155' }}>Frontmatter Metadata</h4>
+                  <h4 style={{ margin: 0, 'font-family': font.sans, 'font-size': '0.86rem', 'font-weight': 600, color: colors.inkSoft }}>
+                    Frontmatter metadata
+                  </h4>
                   <button
                     onClick={() => handleAddFrontmatterField()}
                     style={{
-                      background: '#e2e8f0',
-                      border: 'none',
-                      padding: '4px 8px',
-                      'border-radius': '4px',
+                      display: 'flex',
+                      'align-items': 'center',
+                      gap: '5px',
+                      background: colors.paperCard,
+                      border: `1px solid ${colors.border}`,
+                      color: colors.inkSoft,
+                      padding: '5px 10px',
+                      'border-radius': '6px',
                       cursor: 'pointer',
-                      'font-size': '0.8rem'
+                      'font-family': font.sans,
+                      'font-size': '0.78rem',
+                      'font-weight': 600
                     }}
                   >
-                    + Custom Field
+                    <Icon name="plus" size={12} /> Custom field
                   </button>
                 </div>
 
@@ -269,11 +313,15 @@ export default function Workspace(props: WorkspaceProps) {
                           value={attr().key}
                           onInput={e => updateAttrKey(index, e.currentTarget.value)}
                           style={{
-                            width: '160px',
-                            padding: '6px 8px',
-                            border: '1px solid #cbd5e1',
-                            'border-radius': '4px',
-                            'font-weight': '600'
+                            width: '150px',
+                            padding: '7px 10px',
+                            border: `1px solid ${colors.borderStrong}`,
+                            'border-radius': '6px',
+                            'font-family': font.sans,
+                            'font-size': '0.85rem',
+                            'font-weight': 600,
+                            color: colors.ink,
+                            background: colors.paperCard
                           }}
                         />
 
@@ -290,9 +338,13 @@ export default function Workspace(props: WorkspaceProps) {
                                   onInput={e => updateAttrVal(index, e.currentTarget.value)}
                                   style={{
                                     flex: 1,
-                                    padding: '6px 8px',
-                                    border: '1px solid #cbd5e1',
-                                    'border-radius': '4px'
+                                    padding: '7px 10px',
+                                    border: `1px solid ${colors.border}`,
+                                    'border-radius': '6px',
+                                    'font-family': font.sans,
+                                    'font-size': '0.85rem',
+                                    color: colors.ink,
+                                    background: colors.paperCard
                                   }}
                                 />
                               }
@@ -304,9 +356,13 @@ export default function Workspace(props: WorkspaceProps) {
                                 onInput={e => updateAttrVal(index, e.currentTarget.value)}
                                 style={{
                                   flex: 1,
-                                  padding: '6px 8px',
-                                  border: '1px solid #cbd5e1',
-                                  'border-radius': '4px'
+                                  padding: '7px 10px',
+                                  border: `1px solid ${colors.border}`,
+                                  'border-radius': '6px',
+                                  'font-family': font.sans,
+                                  'font-size': '0.85rem',
+                                  color: colors.ink,
+                                  background: colors.paperCard
                                 }}
                               />
                             </Show>
@@ -317,13 +373,16 @@ export default function Workspace(props: WorkspaceProps) {
                             onChange={e => updateAttrVal(index, e.currentTarget.value)}
                             style={{
                               flex: 1,
-                              padding: '6px 8px',
-                              border: '1px solid #cbd5e1',
-                              'border-radius': '4px',
-                              background: '#fff'
+                              padding: '7px 10px',
+                              border: `1px solid ${colors.border}`,
+                              'border-radius': '6px',
+                              'font-family': font.sans,
+                              'font-size': '0.85rem',
+                              color: colors.ink,
+                              background: colors.paperCard
                             }}
                           >
-                            <option value="">-- Select {fieldDef?.name} --</option>
+                            <option value="">Select {fieldDef?.name}</option>
                             <For each={fieldDef?.options || []}>{opt => <option value={opt}>{opt}</option>}</For>
                           </select>
                         </Show>
@@ -331,15 +390,18 @@ export default function Workspace(props: WorkspaceProps) {
                         <button
                           onClick={() => handleRemoveFrontmatterField(index)}
                           style={{
-                            background: '#fee2e2',
-                            color: '#dc2626',
+                            display: 'flex',
+                            'align-items': 'center',
+                            background: 'transparent',
+                            color: colors.inkFaint,
                             border: 'none',
-                            padding: '6px 10px',
-                            'border-radius': '4px',
+                            padding: '0 6px',
                             cursor: 'pointer'
                           }}
+                          onMouseEnter={e => (e.currentTarget.style.color = colors.rust)}
+                          onMouseLeave={e => (e.currentTarget.style.color = colors.inkFaint)}
                         >
-                          ✕
+                          <Icon name="x" size={15} />
                         </button>
                       </div>
                     );
@@ -351,29 +413,31 @@ export default function Workspace(props: WorkspaceProps) {
                     style={{
                       'margin-top': '12px',
                       'padding-top': '12px',
-                      'border-top': '1px dashed #e2e8f0',
+                      'border-top': `1px dashed ${colors.border}`,
                       display: 'flex',
                       gap: '6px',
                       'align-items': 'center',
                       'flex-wrap': 'wrap'
                     }}
                   >
-                    <span style={{ 'font-size': '0.75rem', color: '#64748b' }}>Add field:</span>
+                    <span style={{ 'font-size': '0.74rem', color: colors.inkFaint, 'font-family': font.sans }}>Add field:</span>
                     <For each={getActiveRepoConfig()?.frontmatterSchema || []}>
                       {(schemaField: SchemaField) => (
                         <button
                           onClick={() => handleAddFrontmatterField(schemaField.name)}
                           style={{
-                            background: '#eff6ff',
-                            color: '#2563eb',
-                            border: '1px solid #bfdbfe',
-                            padding: '2px 8px',
-                            'border-radius': '12px',
-                            'font-size': '0.75rem',
+                            background: colors.blueTint,
+                            color: colors.blue,
+                            border: `1px solid ${colors.borderStrong}`,
+                            padding: '3px 10px',
+                            'border-radius': '999px',
+                            'font-family': font.sans,
+                            'font-size': '0.74rem',
+                            'font-weight': 600,
                             cursor: 'pointer'
                           }}
                         >
-                          + {schemaField.name} ({schemaField.type})
+                          {schemaField.name}
                         </button>
                       )}
                     </For>
@@ -383,19 +447,24 @@ export default function Workspace(props: WorkspaceProps) {
             </Show>
 
             <div style={{ flex: 1, display: 'flex', 'flex-direction': 'column' }}>
-              <h4 style={{ margin: '0 0 8px 0', color: '#334155' }}>Markdown Content</h4>
+              <h4 style={{ margin: '0 0 8px 0', 'font-family': font.sans, 'font-size': '0.86rem', 'font-weight': 600, color: colors.inkSoft }}>
+                Markdown content
+              </h4>
               <textarea
                 value={props.markdownBody()}
                 onInput={e => props.setMarkdownBody(e.currentTarget.value)}
                 style={{
                   flex: 1,
                   'min-height': '350px',
-                  padding: '12px',
-                  'font-family': 'monospace',
-                  border: '1px solid #cbd5e1',
-                  'border-radius': '8px',
-                  'font-size': '0.95rem',
-                  'line-height': '1.5'
+                  padding: '14px',
+                  'font-family': font.mono,
+                  border: `1px solid ${colors.border}`,
+                  'border-radius': '9px',
+                  'font-size': '0.9rem',
+                  'line-height': '1.55',
+                  color: colors.ink,
+                  background: colors.paperCard,
+                  outline: 'none'
                 }}
               />
             </div>

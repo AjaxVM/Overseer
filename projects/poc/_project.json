@@ -22,10 +22,10 @@
       {
         "id": "poc-3",
         "name": "Alert if navigating away from unsaved",
-        "status": "idea",
+        "status": "ready",
         "fileName": "3-alert-if-navigating-away-from-unsaved.md",
         "filePath": "C:\\my_progs\\overseer\\projects\\poc\\3-alert-if-navigating-away-from-unsaved.md",
-        "mtime": 1789317303354.4692
+        "mtime": 1789583731948.9338
       },
       {
         "id": "poc-4",

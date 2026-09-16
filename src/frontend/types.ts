@@ -8,6 +8,9 @@ export interface SchemaField {
   type: 'string' | 'number' | 'enum';
   options?: string[];
   optionsRaw?: string;
+  // Maps an enum option value to a theme.ts SwatchName - only surfaced in the UI for
+  // the built-in `status` field for now (see Modals.tsx's RepoConfigModal).
+  optionColors?: Record<string, string>;
 }
 
 export interface TicketSummary {

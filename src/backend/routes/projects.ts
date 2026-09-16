@@ -137,6 +137,7 @@ export function handleGetProjects(ctx: RouteContext, _req: any, res: any) {
       ]
     };
   });
+
   return res.end(JSON.stringify(combinedTree));
 }
 
@@ -158,7 +159,13 @@ export function handleGetProject(ctx: RouteContext, req: any, res: any) {
     }
   }
 
-  const manifest = loadOrTrueUpProject(projectPath, targetRepoConfig);
+  // Serve the cached manifest as-is - don't block navigation on a live readdir/stat
+  // walk of every ticket and sub-project on every request. The file watcher
+  // (src/backend/index.ts) trues this up in the background off the request path and
+  // pushes a projects-update event when something actually changed. Only fall back to
+  // a synchronous true-up for a directory that has never been touched at all, since
+  // there's nothing cached yet to serve.
+  const manifest = readRawProjectManifest(projectPath) || loadOrTrueUpProject(projectPath, targetRepoConfig);
 
   let description = '';
   const descFile =
