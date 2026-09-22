@@ -367,3 +367,39 @@ export function handlePostItemCreate(ctx: RouteContext, req: any, res: any) {
     }
   });
 }
+
+// Deletes a ticket file or a project/sub-project directory, then trues up the parent
+// project's manifest so the removed entry disappears immediately rather than waiting on
+// the file watcher's debounce window.
+export function handlePostItemDelete(ctx: RouteContext, req: any, res: any) {
+  let reqBody = '';
+  req.on('data', (chunk: string) => {
+    reqBody += chunk;
+  });
+  req.on('end', () => {
+    try {
+      const { itemPath, type, parentPath, repoPath } = JSON.parse(reqBody);
+      if (!itemPath || !fs.existsSync(itemPath)) {
+        throw new Error('Valid itemPath required');
+      }
+
+      if (type === 'directory') {
+        fs.rmSync(itemPath, { recursive: true, force: true });
+      } else {
+        fs.unlinkSync(itemPath);
+      }
+
+      if (parentPath && repoPath && fs.existsSync(parentPath)) {
+        const repoConfig = getOrInitRepoConfig(repoPath);
+        loadOrTrueUpProject(parentPath, repoConfig);
+      }
+
+      ctx.server.ws.send({ type: 'custom', event: 'projects-update' });
+      res.setHeader('Content-Type', 'application/json');
+      return res.end(JSON.stringify({ success: true }));
+    } catch (e: any) {
+      res.statusCode = 400;
+      return res.end(JSON.stringify({ error: e.message }));
+    }
+  });
+}

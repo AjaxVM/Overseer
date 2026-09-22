@@ -3,7 +3,7 @@ import type { Accessor, JSX } from 'solid-js';
 import Icon from './Icon';
 import { colors, font, getStatusBadgeStyle, getTypeBadgeStyle } from './theme';
 import type { BadgeStyle } from './theme';
-import type { DocTreeEntry, ProjectDetailsResponse, RepoTreeNode, TicketSummary } from './types';
+import type { DocTreeEntry, ProjectDetailsResponse, RepoTreeNode, SubProjectSummary, TicketSummary } from './types';
 
 interface SidebarProps {
   tree: Accessor<RepoTreeNode[]>;
@@ -19,6 +19,8 @@ interface SidebarProps {
   onAddRepoClick: () => void;
   onReorderTickets: (fileNameOrder: string[]) => void;
   onReorderSubprojects: (slugOrder: string[]) => void;
+  onDeleteTicket: (ticket: TicketSummary) => void;
+  onDeleteSubproject: (sub: SubProjectSummary) => void;
 }
 
 function SectionHeader(props: { icon: 'folder' | 'ticket' | 'book'; label: string; count: number; open: boolean; onToggle: () => void }) {
@@ -41,6 +43,35 @@ function SectionHeader(props: { icon: 'folder' | 'ticket' | 'book'; label: strin
       </div>
       <Icon name={props.open ? 'chevronDown' : 'chevronRight'} size={13} style={{ color: colors.inkFaint }} />
     </div>
+  );
+}
+
+// Trash button shown in a row's trailing slot for tickets/sub-projects - stops the
+// click from also triggering the row's own onClick (which would navigate/open it).
+function DeleteButton(props: { title: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={e => {
+        e.stopPropagation();
+        props.onClick();
+      }}
+      title={props.title}
+      style={{
+        display: 'flex',
+        'align-items': 'center',
+        background: 'transparent',
+        color: colors.inkFaint,
+        border: 'none',
+        padding: '2px',
+        cursor: 'pointer',
+        'flex-shrink': 0
+      }}
+      onMouseEnter={e => (e.currentTarget.style.color = colors.rust)}
+      onMouseLeave={e => (e.currentTarget.style.color = colors.inkFaint)}
+    >
+      <Icon name="trash" size={13} />
+    </button>
   );
 }
 
@@ -688,7 +719,12 @@ export default function Sidebar(props: SidebarProps) {
                     label={sub.name}
                     title={sub.name}
                     onClick={() => props.onNavigateProject(sub.path)}
-                    trailing={<Icon name="chevronRight" size={13} style={{ color: colors.inkFaint }} />}
+                    trailing={
+                      <div style={{ display: 'flex', gap: '4px', 'align-items': 'center', 'flex-shrink': 0 }}>
+                        <DeleteButton title={`Delete ${sub.name}`} onClick={() => props.onDeleteSubproject(sub)} />
+                        <Icon name="chevronRight" size={13} style={{ color: colors.inkFaint }} />
+                      </div>
+                    }
                     draggable={true}
                     dragging={draggedSubproject() === sub.slug}
                     dragOver={dragOverSubproject() === sub.slug}
@@ -874,6 +910,7 @@ export default function Sidebar(props: SidebarProps) {
                                 {ticket.status}
                               </span>
                             </Show>
+                            <DeleteButton title={`Delete #${ticket.id}`} onClick={() => props.onDeleteTicket(ticket)} />
                           </div>
                         }
                       />

@@ -14,7 +14,8 @@ export type IconName =
   | 'chevronDown'
   | 'chevronRight'
   | 'search'
-  | 'box';
+  | 'box'
+  | 'trash';
 
 function Gear() {
   const spokes = Array.from({ length: 8 }, (_, i) => {
@@ -100,6 +101,15 @@ const paths: Record<IconName, () => JSX.Element> = {
       <path d="M21 8 12 3 3 8v8l9 5 9-5Z" />
       <path d="M3 8l9 5 9-5" />
       <path d="M12 13v8" />
+    </>
+  ),
+  trash: () => (
+    <>
+      <path d="M4 7h16" />
+      <path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3" />
+      <path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13" />
+      <line x1="10" y1="11" x2="10" y2="17" />
+      <line x1="14" y1="11" x2="14" y2="17" />
     </>
   )
 };

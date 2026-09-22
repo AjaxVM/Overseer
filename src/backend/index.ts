@@ -7,7 +7,8 @@ import {
   handleGetProject,
   handlePostProjectDescription,
   handlePostProjectReorder,
-  handlePostItemCreate
+  handlePostItemCreate,
+  handlePostItemDelete
 } from './routes/projects';
 import { handleGetFileRead, handlePostFileSave } from './routes/files';
 import {
@@ -89,6 +90,7 @@ export function overseer() {
           if (req.url.startsWith('/api/file/read') && req.method === 'GET') return handleGetFileRead(req, res);
           if (req.url === '/api/file/save' && req.method === 'POST') return handlePostFileSave(req, res);
           if (req.url === '/api/item/create' && req.method === 'POST') return handlePostItemCreate(ctx, req, res);
+          if (req.url === '/api/item/delete' && req.method === 'POST') return handlePostItemDelete(ctx, req, res);
           if (req.url === '/api/config/save' && req.method === 'POST') return handlePostConfigSave(ctx, req, res);
           if (req.url.startsWith('/api/fs/browse') && req.method === 'GET') return handleGetFsBrowse(req, res);
           if (req.url === '/api/projects/add' && req.method === 'POST') return handlePostProjectsAdd(ctx, req, res);

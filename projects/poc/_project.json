@@ -119,12 +119,6 @@
         "fileName": "12-currently-viewed-ticket-project-should-persist-in-url-and-restore.md"
       },
       {
-        "id": "poc-13",
-        "name": "Another Cool Test",
-        "status": "idea",
-        "fileName": "13-another-cool-test.md"
-      },
-      {
         "id": "poc-14",
         "name": "AGENTS.md reference for LLMs to look at to understand Overseer structure",
         "status": "idea",
@@ -204,7 +198,7 @@
       {
         "id": "5t5p3",
         "name": "Ability to delete tickets or projects",
-        "status": "idea",
+        "status": "done",
         "type": "bug",
         "fileName": "5t5p3-ability-to-delete-tickets-or-projects.md"
       },
@@ -216,11 +210,11 @@
         "fileName": "byvj8-add-quick-edit-of-ticket-name.md"
       },
       {
-        "id": "6ztxx",
-        "name": "Testing",
-        "status": "planning",
-        "type": "feature",
-        "fileName": "6ztxx-testing.md"
+        "id": "dz55s",
+        "name": "Save filters in localStorage and persist on navigating projects/repos",
+        "status": "idea",
+        "type": "",
+        "fileName": "dz55s-save-filters-in-localstorage-and-persist-on-navigating-projects-repos.md"
       }
     ],
     "subprojects": []

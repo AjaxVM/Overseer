@@ -1,7 +1,7 @@
 ---
 id: 5t5p3
 name: Ability to delete tickets or projects
-status: idea
+status: done
 type: bug
 estimate: tiny
 complexity: simple

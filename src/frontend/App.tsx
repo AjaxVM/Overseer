@@ -3,7 +3,9 @@ import type {
   FrontmatterItem,
   SchemaField,
   ProjectDetailsResponse,
-  RepoTreeNode
+  RepoTreeNode,
+  SubProjectSummary,
+  TicketSummary
 } from './types';
 import Sidebar from './Sidebar';
 import Workspace from './Workspace';
@@ -252,6 +254,111 @@ export default function App() {
     }
   };
 
+  const clearWorkspace = () => {
+    setActiveFilePath(null);
+    setActiveTicketId(null);
+    setActiveTicketName(null);
+    setAttributes([]);
+    setOriginalAttributes([]);
+    setMarkdownBody('');
+    setOriginalMarkdownBody('');
+    setActiveTab('preview');
+    setSaveStatus('');
+  };
+
+  // filePath === dirPath doesn't count as "under" it - only true containment
+  // (a real child of the directory) should trigger a workspace reset.
+  const isPathUnder = (filePath: string | null, dirPath: string) => {
+    if (!filePath || filePath.length <= dirPath.length || !filePath.startsWith(dirPath)) return false;
+    return filePath[dirPath.length] === '/' || filePath[dirPath.length] === '\\';
+  };
+
+  const dirnameOf = (filePath: string) => filePath.replace(/[\\/][^\\/]*$/, '');
+
+  const deleteItem = async (itemPath: string, type: 'file' | 'directory', parentPath: string) => {
+    const res = await fetch('/api/item/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itemPath, type, parentPath, repoPath: activeRepoPath() })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to delete');
+  };
+
+  const handleDeleteTicket = async (ticket: TicketSummary) => {
+    if (!window.confirm(`Delete ticket "${ticket.name}"? This can't be undone.`)) return;
+    const parentPath = activeProjectPath();
+    if (!parentPath) return;
+    try {
+      await deleteItem(ticket.filePath, 'file', parentPath);
+      if (activeFilePath() === ticket.filePath) clearWorkspace();
+      loadProject(parentPath, activeRepoPath() || undefined);
+      fetchTree();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleDeleteSubproject = async (sub: SubProjectSummary) => {
+    if (!window.confirm(`Delete project "${sub.name}" and everything inside it? This can't be undone.`)) return;
+    const parentPath = activeProjectPath();
+    if (!parentPath) return;
+    try {
+      await deleteItem(sub.path, 'directory', parentPath);
+      if (activeFilePath() === sub.path || isPathUnder(activeFilePath(), sub.path)) clearWorkspace();
+
+      if (activeProjectPath() === sub.path || isPathUnder(activeProjectPath(), sub.path)) {
+        loadProject(parentPath, activeRepoPath() || undefined, true);
+      } else {
+        loadProject(parentPath, activeRepoPath() || undefined);
+      }
+      fetchTree();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  // Whether the item currently open in the workspace (a ticket, doc, or a project's own
+  // overview page) can be deleted from there - the projects-root pseudo-project's own
+  // overview has no parent and isn't a real deletable directory.
+  const canDeleteActive = () => {
+    const filePath = activeFilePath();
+    if (!filePath) return false;
+    if (filePath.endsWith('_project.md')) return !!projectData()?.parentPath;
+    return true;
+  };
+
+  const handleDeleteActiveItem = async () => {
+    const filePath = activeFilePath();
+    if (!filePath) return;
+
+    if (filePath.endsWith('_project.md')) {
+      const projPath = activeProjectPath();
+      const parentPath = projectData()?.parentPath;
+      if (!projPath || !parentPath) return;
+      if (!window.confirm(`Delete project "${projectData()?.manifest.name}" and everything inside it? This can't be undone.`)) return;
+      try {
+        await deleteItem(projPath, 'directory', parentPath);
+        clearWorkspace();
+        loadProject(parentPath, activeRepoPath() || undefined, true);
+        fetchTree();
+      } catch (err: any) {
+        alert(err.message);
+      }
+    } else {
+      if (!window.confirm(`Delete "${activeTicketName()}"? This can't be undone.`)) return;
+      const parentPath = dirnameOf(filePath);
+      try {
+        await deleteItem(filePath, 'file', parentPath);
+        clearWorkspace();
+        if (activeProjectPath()) loadProject(activeProjectPath()!, activeRepoPath() || undefined);
+        fetchTree();
+      } catch (err: any) {
+        alert(err.message);
+      }
+    }
+  };
+
   const reorderProject = async (body: { ticketOrder?: string[]; subprojectOrder?: string[] }) => {
     const pPath = activeProjectPath();
     if (!pPath) return;
@@ -397,6 +504,8 @@ export default function App() {
         onAddRepoClick={() => setIsModalOpen(true)}
         onReorderTickets={order => reorderProject({ ticketOrder: order })}
         onReorderSubprojects={order => reorderProject({ subprojectOrder: order })}
+        onDeleteTicket={handleDeleteTicket}
+        onDeleteSubproject={handleDeleteSubproject}
       />
 
       <Workspace
@@ -414,6 +523,8 @@ export default function App() {
         isSaving={isSaving}
         saveStatus={saveStatus}
         onSave={handleSaveFile}
+        canDeleteActive={canDeleteActive}
+        onDeleteActive={handleDeleteActiveItem}
       />
 
       <AddRepoModal

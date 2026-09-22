@@ -26,6 +26,8 @@ interface WorkspaceProps {
   isSaving: Accessor<boolean>;
   saveStatus: Accessor<string>;
   onSave: () => void;
+  canDeleteActive: Accessor<boolean>;
+  onDeleteActive: () => void;
 }
 
 function TabButton(props: { active: boolean; icon: 'eye' | 'pencil'; label: string; onClick: () => void }) {
@@ -293,7 +295,7 @@ export default function Workspace(props: WorkspaceProps) {
             </div>
           </div>
 
-          <Show when={props.saveStatus() || props.activeTab() === 'edit'}>
+          <Show when={props.saveStatus() || props.activeTab() === 'edit' || (props.activeTab() === 'preview' && props.canDeleteActive())}>
             <div style={{ display: 'flex', 'align-items': 'center', gap: '14px', 'flex-shrink': 0 }}>
               <Show when={props.saveStatus()}>
                 <span
@@ -305,6 +307,27 @@ export default function Workspace(props: WorkspaceProps) {
                 >
                   {props.saveStatus()}
                 </span>
+              </Show>
+              <Show when={props.activeTab() === 'preview' && props.canDeleteActive()}>
+                <button
+                  onClick={props.onDeleteActive}
+                  style={{
+                    display: 'flex',
+                    'align-items': 'center',
+                    gap: '6px',
+                    background: 'transparent',
+                    color: colors.rust,
+                    border: `1px solid ${colors.border}`,
+                    padding: '8px 16px',
+                    'border-radius': '7px',
+                    cursor: 'pointer',
+                    'font-family': font.sans,
+                    'font-weight': 600,
+                    'font-size': '0.85rem'
+                  }}
+                >
+                  <Icon name="trash" size={14} /> Delete
+                </button>
               </Show>
               <Show when={props.activeTab() === 'edit'}>
                 <button
