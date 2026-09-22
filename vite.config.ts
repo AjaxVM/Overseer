@@ -10,5 +10,8 @@ console.log(`Serving on port: ${port}. To change port, set "port" in ~/overseer.
 
 export default defineConfig({
   plugins: [solidPlugin(), overseerInstance.plugin],
-  server: { port: overseerInstance.config.port || 11111, fs: { strict: false } }
+  server: {
+    port: overseerInstance.config.port || 11111,
+    fs: { strict: false }
+  },
 });

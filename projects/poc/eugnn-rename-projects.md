@@ -2,7 +2,7 @@
 id: eugnn
 name: Rename projects
 status: idea
-type: bug
+type: 
 estimate: tiny
 complexity: simple
 priority: must
