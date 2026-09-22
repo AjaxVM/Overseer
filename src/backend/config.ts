@@ -29,26 +29,34 @@ export const DEFAULT_REPO_CONFIG: RepoConfig = {
       name: 'status',
       type: 'enum',
       options: ['idea', 'designing', 'planning', 'ready', 'working', 'reviewing', 'done'],
-      // Loosely follows the idea -> done lifecycle: cool/uncommitted colors early,
-      // warm/active colors in the middle, settling on green at done.
+      // The Okabe-Ito colorblind-safe palette (Okabe & Ito, 2008) - chosen over an
+      // arbitrary vivid set because it separates by lightness as well as hue, which is
+      // what actually keeps e.g. idea and working apart under red-green color vision
+      // deficiency (two hues that only differ in their red content, like a violet and
+      // a blue, collapse toward each other for deuteranopia/protanopia - varying
+      // lightness too avoids that regardless of hue). Still punchier than the muted
+      // app palette in src/frontend/theme.ts, so status keeps its visual pop.
       optionColors: {
-        idea: '#8B5CF6',
-        designing: '#EAB308',
-        planning: '#F97316',
-        ready: '#EC4899',
-        working: '#3B82F6',
-        reviewing: '#14B8A6',
-        done: '#22C55E'
+        idea: '#CC79A7',
+        designing: '#F0E442',
+        planning: '#E69F00',
+        ready: '#56B4E9',
+        working: '#0072B2',
+        reviewing: '#D55E00',
+        done: '#009E73'
       }
     },
     {
       name: 'type',
       type: 'enum',
       options: ['bug', 'feature', 'design'],
+      // Muted, theme-toned hues (same family as blue/bronze/rust in theme.ts) - the
+      // deliberate opposite of status's punchy set, so the two badge fields read as
+      // distinct layers rather than competing for attention.
       optionColors: {
-        bug: '#EF4444',
-        feature: '#6366F1',
-        design: '#B45309'
+        bug: '#7A2E1F',
+        feature: '#2E4F6E',
+        design: '#8A6D2E'
       }
     },
     {

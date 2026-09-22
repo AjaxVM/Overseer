@@ -15,13 +15,13 @@
         "done"
       ],
       "optionColors": {
-        "idea": "#8B5CF6",
-        "designing": "#EAB308",
-        "planning": "#F97316",
-        "ready": "#EC4899",
-        "working": "#3B82F6",
-        "reviewing": "#14B8A6",
-        "done": "#126732"
+        "idea": "#CC79A7",
+        "designing": "#F0E442",
+        "planning": "#E69F00",
+        "ready": "#56B4E9",
+        "working": "#0072B2",
+        "reviewing": "#D55E00",
+        "done": "#009E73"
       }
     },
     {
@@ -33,9 +33,9 @@
         "design"
       ],
       "optionColors": {
-        "bug": "#ff6666",
-        "feature": "#b0b7ec",
-        "design": "#fff14d"
+        "bug": "#7A2E1F",
+        "feature": "#2E4F6E",
+        "design": "#8A6D2E"
       }
     },
     {

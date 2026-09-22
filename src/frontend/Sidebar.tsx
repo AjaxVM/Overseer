@@ -267,7 +267,13 @@ export default function Sidebar(props: SidebarProps) {
                     cursor: 'pointer'
                   }}
                 >
-                  <For each={props.tree()}>{repo => <option value={repo.repoPath}>{repo.name}</option>}</For>
+                  <For each={props.tree()}>
+                    {repo => (
+                      <option value={repo.repoPath} selected={repo.repoPath === props.activeRepoPath()}>
+                        {repo.name}
+                      </option>
+                    )}
+                  </For>
                 </select>
                 <Icon name="chevronDown" size={12} style={{ color: colors.inkFaint }} />
               </Show>

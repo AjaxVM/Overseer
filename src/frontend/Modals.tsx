@@ -87,9 +87,12 @@ const errorTextStyle: JSX.CSSProperties = {
   'margin-bottom': '12px'
 };
 
-function ModalOverlay(props: { width: string; maxHeight?: string; children: JSX.Element }) {
+function ModalOverlay(props: { width: string; maxHeight?: string; onClose: () => void; children: JSX.Element }) {
   return (
     <div
+      onClick={e => {
+        if (e.target === e.currentTarget) props.onClose();
+      }}
       style={{
         position: 'fixed',
         top: 0,
@@ -191,7 +194,7 @@ export function AddRepoModal(props: AddRepoModalProps) {
 
   return (
     <Show when={props.isOpen()}>
-      <ModalOverlay width="520px">
+      <ModalOverlay width="520px" onClose={props.onClose}>
         <ModalTitle>Register repository root</ModalTitle>
         <form onSubmit={props.onSubmit}>
           <div style={{ display: 'flex', gap: '8px', 'margin-bottom': '14px' }}>
@@ -374,7 +377,7 @@ export function CreateItemModal(props: CreateItemModalProps) {
 
   return (
     <Show when={props.isOpen()}>
-      <ModalOverlay width="480px">
+      <ModalOverlay width="480px" onClose={confirmClose}>
         <ModalTitle>Create ticket or sub-project</ModalTitle>
         <form onSubmit={props.onSubmit}>
           <div style={{ 'margin-bottom': '14px' }}>
@@ -630,7 +633,7 @@ export function RepoConfigModal(props: RepoConfigModalProps) {
 
   return (
     <Show when={props.isOpen()}>
-      <ModalOverlay width="580px" maxHeight="85vh">
+      <ModalOverlay width="580px" maxHeight="85vh" onClose={confirmClose}>
         <ModalTitle>Repository settings</ModalTitle>
         <form onSubmit={props.onSubmit}>
           <div style={{ display: 'flex', gap: '12px', 'margin-bottom': '18px' }}>
