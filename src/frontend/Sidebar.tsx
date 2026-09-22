@@ -177,18 +177,19 @@ export default function Sidebar(props: SidebarProps) {
           <div style={{ display: 'flex', 'align-items': 'center', gap: '9px' }}>
             <div
               style={{
-                width: '26px',
-                height: '26px',
-                'border-radius': '50%',
-                border: `1.5px solid ${colors.bronze}`,
-                display: 'flex',
-                'align-items': 'center',
-                'justify-content': 'center',
-                color: colors.blue,
-                'flex-shrink': 0
+                width: '22px',
+                height: '22px',
+                // 'border-radius': '50%',
+                // border: `1.5px solid ${colors.bronze}`,
+                // display: 'flex',
+                // 'align-items': 'center',
+                // 'justify-content': 'center',
+                // color: colors.blue,
+                // 'flex-shrink': 0
               }}
             >
-              <Icon name="eye" size={13} />
+              {/* <Icon name="eye" size={13} /> */}
+              <img src="/base_icon.png" style={{width:"100%", height:"100%"}} />
             </div>
             <span style={{ 'font-family': font.display, 'font-weight': 600, 'font-size': '1.18rem', color: colors.ink }}>Overseer</span>
           </div>
