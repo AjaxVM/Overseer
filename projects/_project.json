@@ -1,0 +1,13 @@
+{
+  "name": "projects",
+  "childOrder": [],
+  "projectmap": {
+    "tickets": [],
+    "subprojects": [
+      {
+        "name": "poc",
+        "slug": "poc"
+      }
+    ]
+  }
+}

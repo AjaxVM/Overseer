@@ -7,15 +7,13 @@ export interface TicketSummary {
   status: string;
   type?: string;
   fileName: string;
-  filePath: string;
-  mtime: number;
+  filePath: string; // derived at read time from (dir, fileName) - never persisted
 }
 
 export interface SubProjectSummary {
   name: string;
   slug: string;
-  path: string;
-  mtime?: number;
+  path: string; // derived at read time from (dir, slug) - never persisted
 }
 
 export interface ProjectManifest {
@@ -27,6 +25,56 @@ export interface ProjectManifest {
     tickets: TicketSummary[];
     subprojects: SubProjectSummary[];
   };
+}
+
+// On-disk shape only - no absolute paths, no filesystem mtimes, so the file is safe to
+// commit and diffs stay stable across machines/collaborators.
+interface PersistedTicketSummary {
+  id: string;
+  name: string;
+  status: string;
+  type?: string;
+  fileName: string;
+}
+
+interface PersistedSubProjectSummary {
+  name: string;
+  slug: string;
+}
+
+interface PersistedProjectManifest {
+  name: string;
+  id?: string;
+  descriptionFile?: string;
+  childOrder?: string[];
+  projectmap: {
+    tickets: PersistedTicketSummary[];
+    subprojects: PersistedSubProjectSummary[];
+  };
+}
+
+// Mtime-based staleness cache, keyed by absolute path and shared across all projects.
+// Intentionally in-memory only (not persisted into _project.json) so the file stays
+// portable - resets on dev-server restart, which is fine since re-scanning a project's
+// ticket files is cheap at this tool's scale.
+const ticketCache = new Map<string, { mtime: number; summary: TicketSummary }>();
+const subManifestCache = new Map<string, { mtime: number; name: string }>();
+
+function toPersistedManifest(manifest: ProjectManifest): PersistedProjectManifest {
+  return {
+    name: manifest.name,
+    id: manifest.id,
+    descriptionFile: manifest.descriptionFile,
+    childOrder: manifest.childOrder,
+    projectmap: {
+      tickets: manifest.projectmap.tickets.map(({ filePath, ...rest }) => rest),
+      subprojects: manifest.projectmap.subprojects.map(({ path: _path, ...rest }) => rest)
+    }
+  };
+}
+
+function serializeManifest(manifest: ProjectManifest): string {
+  return JSON.stringify(toPersistedManifest(manifest), null, 2) + '\n';
 }
 
 export function generateShortId(prefix?: string): string {
@@ -97,6 +145,19 @@ export function readRawProjectManifest(dir: string): ProjectManifest | null {
   try {
     const raw = fs.readFileSync(manifestPath, 'utf-8');
     const data = JSON.parse(raw);
+    const tickets: TicketSummary[] = (data.projectmap?.tickets || []).map((t: any) => ({
+      id: t.id,
+      name: t.name,
+      status: t.status,
+      type: t.type,
+      fileName: t.fileName,
+      filePath: path.join(dir, t.fileName)
+    }));
+    const subprojects: SubProjectSummary[] = (data.projectmap?.subprojects || []).map((s: any) => ({
+      name: s.name,
+      slug: s.slug,
+      path: path.join(dir, s.slug)
+    }));
     return {
       name: data.name || path.basename(dir),
       id: data.id,
@@ -108,7 +169,7 @@ export function readRawProjectManifest(dir: string): ProjectManifest | null {
           ? 'description.md'
           : undefined),
       childOrder: data.childOrder || [],
-      projectmap: data.projectmap || { tickets: [], subprojects: [] }
+      projectmap: { tickets, subprojects }
     };
   } catch (e) {
     return null;
@@ -118,7 +179,7 @@ export function readRawProjectManifest(dir: string): ProjectManifest | null {
 export function saveProjectManifest(dir: string, manifest: ProjectManifest): void {
   // Always write to _project.json to adhere to POC 15 proposal
   const targetPath = path.join(dir, '_project.json');
-  fs.writeFileSync(targetPath, JSON.stringify(manifest, null, 2) + '\n', 'utf-8');
+  fs.writeFileSync(targetPath, serializeManifest(manifest), 'utf-8');
 }
 
 export function loadOrTrueUpProject(projectDir: string, _repoConfig?: any): ProjectManifest {
@@ -134,19 +195,7 @@ export function loadOrTrueUpProject(projectDir: string, _repoConfig?: any): Proj
     projectmap: { tickets: [], subprojects: [] }
   };
 
-  const cachedTicketsMap = new Map<string, TicketSummary>();
-  (existingManifest.projectmap?.tickets || []).forEach(ticket => {
-    cachedTicketsMap.set(ticket.fileName, ticket);
-  });
-
   const entries = fs.readdirSync(projectDir, { withFileTypes: true });
-
-  let hasChanges = false;
-
-  const cachedSubprojectsMap = new Map<string, SubProjectSummary>();
-  (existingManifest.projectmap?.subprojects || []).forEach(sub => {
-    cachedSubprojectsMap.set(sub.slug, sub);
-  });
 
   // 1. Detect subprojects. A sub-directory's own manifest mtime gates whether we
   // re-read it - without this, every navigation re-read every sub-project's
@@ -164,23 +213,24 @@ export function loadOrTrueUpProject(projectDir: string, _repoConfig?: any): Proj
         subMtime = undefined;
       }
 
-      const cached = cachedSubprojectsMap.get(entry.name);
-      if (cached && cached.mtime === subMtime) {
-        subprojects.push(cached);
+      const cached = subManifestCache.get(subManifestPath);
+      if (cached && subMtime !== undefined && cached.mtime === subMtime) {
+        subprojects.push({ name: cached.name, slug: entry.name, path: subDirPath });
         return;
       }
 
-      hasChanges = true;
       let subName = entry.name;
       const subManifest = readRawProjectManifest(subDirPath);
       if (subManifest?.name) {
         subName = subManifest.name;
       }
+      if (subMtime !== undefined) {
+        subManifestCache.set(subManifestPath, { mtime: subMtime, name: subName });
+      }
       subprojects.push({
         name: subName,
         slug: entry.name,
-        path: subDirPath,
-        mtime: subMtime
+        path: subDirPath
       });
     });
 
@@ -199,12 +249,11 @@ export function loadOrTrueUpProject(projectDir: string, _repoConfig?: any): Proj
     const filePath = path.join(projectDir, fileEntry.name);
     try {
       const stat = fs.statSync(filePath);
-      const cached = cachedTicketsMap.get(fileEntry.name);
+      const cached = ticketCache.get(filePath);
 
       if (cached && cached.mtime === stat.mtimeMs) {
-        updatedTickets.push(cached);
+        updatedTickets.push(cached.summary);
       } else {
-        hasChanges = true;
         const raw = fs.readFileSync(filePath, 'utf-8');
         const { attributes, body } = parseFrontmatter(raw);
 
@@ -222,22 +271,15 @@ export function loadOrTrueUpProject(projectDir: string, _repoConfig?: any): Proj
           status: attributes.status || 'idea',
           type: attributes.type,
           fileName: fileEntry.name,
-          filePath,
-          mtime: stat.mtimeMs
+          filePath
         };
+        ticketCache.set(filePath, { mtime: stat.mtimeMs, summary: ticketSummary });
         updatedTickets.push(ticketSummary);
       }
     } catch (e) {
       // Skip files that fail to stat or read
     }
   });
-
-  if (updatedTickets.length !== (existingManifest.projectmap?.tickets || []).length) {
-    hasChanges = true;
-  }
-  if (subprojects.length !== (existingManifest.projectmap?.subprojects || []).length) {
-    hasChanges = true;
-  }
 
   // Sort tickets based on childOrder if present, else numeric/alphabetical
   const childOrder = existingManifest.childOrder || [];
@@ -278,10 +320,23 @@ export function loadOrTrueUpProject(projectDir: string, _repoConfig?: any): Proj
     }
   };
 
-  // Write _project.json if it didn't exist or if changes occurred
+  // Write _project.json only if its content actually changed. A content comparison
+  // (rather than a cache-hit/miss flag) is required here because the mtime cache is
+  // cold on every dev-server restart - without this, a cold-cache re-derivation of
+  // otherwise-unchanged data would force a rewrite (and a spurious git diff) on every
+  // restart, since the old flag conflated "not in memory cache" with "actually changed".
   const primaryManifestPath = path.join(projectDir, '_project.json');
-  if (!fs.existsSync(primaryManifestPath) || hasChanges) {
-    saveProjectManifest(projectDir, finalManifest);
+  const serialized = serializeManifest(finalManifest);
+  let shouldWrite = true;
+  if (fs.existsSync(primaryManifestPath)) {
+    try {
+      shouldWrite = fs.readFileSync(primaryManifestPath, 'utf-8') !== serialized;
+    } catch (e) {
+      shouldWrite = true;
+    }
+  }
+  if (shouldWrite) {
+    fs.writeFileSync(primaryManifestPath, serialized, 'utf-8');
   }
 
   return finalManifest;
@@ -296,11 +351,6 @@ export function syncTicketToManifest(
   const manifest = readRawProjectManifest(projectDir);
   if (!manifest) return;
 
-  let statMtime = Date.now();
-  try {
-    statMtime = fs.statSync(ticketFilePath).mtimeMs;
-  } catch (e) {}
-
   let found = false;
   manifest.projectmap.tickets = (manifest.projectmap.tickets || []).map(ticket => {
     if (ticket.fileName === fileName || ticket.filePath === ticketFilePath) {
@@ -310,8 +360,7 @@ export function syncTicketToManifest(
         id: attributes.id || ticket.id,
         name: attributes.name || ticket.name,
         status: attributes.status || ticket.status,
-        type: attributes.type || ticket.type,
-        mtime: statMtime
+        type: attributes.type || ticket.type
       };
     }
     return ticket;
@@ -324,8 +373,7 @@ export function syncTicketToManifest(
       status: attributes.status || 'idea',
       type: attributes.type,
       fileName,
-      filePath: ticketFilePath,
-      mtime: statMtime
+      filePath: ticketFilePath
     });
   }
 

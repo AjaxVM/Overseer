@@ -1,5 +1,2 @@
 node_modules
 dist
-
-# don't track the generated project configs
-_project.json

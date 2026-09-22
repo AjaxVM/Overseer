@@ -20,14 +20,12 @@ export interface TicketSummary {
   type?: string;
   fileName: string;
   filePath: string;
-  mtime?: number;
 }
 
 export interface SubProjectSummary {
   name: string;
   slug: string;
   path: string;
-  mtime?: number;
 }
 
 export interface ProjectManifest {

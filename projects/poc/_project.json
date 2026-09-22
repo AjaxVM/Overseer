@@ -1,0 +1,172 @@
+{
+  "name": "poc",
+  "descriptionFile": "_project.md",
+  "childOrder": [],
+  "projectmap": {
+    "tickets": [
+      {
+        "id": "poc-1",
+        "name": "Add type as a default frontmatter field",
+        "status": "done",
+        "fileName": "1-add-type-as-a-default-frontmatter-field.md"
+      },
+      {
+        "id": "poc-2",
+        "name": "Fix ticket and folder name display",
+        "status": "done",
+        "fileName": "2-fix-ticket-and-folder-name-display.md"
+      },
+      {
+        "id": "2uxcm",
+        "name": "Allow configuring what fields hoist up to the sidebar",
+        "status": "idea",
+        "type": "bug",
+        "fileName": "2uxcm-allow-configuring-what-fields-hoist-up-to-the-sidebar.md"
+      },
+      {
+        "id": "poc-3",
+        "name": "Alert if navigating away from unsaved",
+        "status": "done",
+        "fileName": "3-alert-if-navigating-away-from-unsaved.md"
+      },
+      {
+        "id": "3bxq5",
+        "name": "How much effort would it be to make the preview editable",
+        "status": "idea",
+        "type": "bug",
+        "fileName": "3bxq5-how-much-effort-would-it-be-to-make-the-preview-editable.md"
+      },
+      {
+        "id": "poc-4",
+        "name": "Allow quick edit of Frontmatter fields from Preview",
+        "status": "idea",
+        "fileName": "4-allow-quick-edit-of-frontmatter-fields-from-preview.md"
+      },
+      {
+        "id": "p9j6t",
+        "name": "How to handle gitignore for project config file",
+        "status": "idea",
+        "type": "bug",
+        "fileName": "p9j6t-how-to-handle-gitignore-for-project-config-file.md"
+      },
+      {
+        "id": "poc-5",
+        "name": "Support assignable fields",
+        "status": "idea",
+        "fileName": "5-support-assignable-fields.md"
+      },
+      {
+        "id": "5x7e2",
+        "name": "When creating ticket, have an accordion in the modal to set fields",
+        "status": "idea",
+        "type": "bug",
+        "fileName": "5x7e2-when-creating-ticket-have-an-accordion-in-the-modal-to-set-fields.md"
+      },
+      {
+        "id": "poc-6",
+        "name": "Add a field quick links weird",
+        "status": "idea",
+        "fileName": "6-add-a-field-quick-links-weird.md"
+      },
+      {
+        "id": "poc-7",
+        "name": "Ticket header needs to be sticky",
+        "status": "idea",
+        "fileName": "7-ticket-header-needs-to-be-sticky.md"
+      },
+      {
+        "id": "poc-8",
+        "name": "Edit header improvements",
+        "status": "done",
+        "fileName": "8-edit-header-improvements.md"
+      },
+      {
+        "id": "eugnn",
+        "name": "Rename projects",
+        "status": "idea",
+        "type": "bug",
+        "fileName": "eugnn-rename-projects.md"
+      },
+      {
+        "id": "poc-9",
+        "name": "Support moving tickets between projects",
+        "status": "idea",
+        "fileName": "9-support-moving-tickets-between-projects.md"
+      },
+      {
+        "id": "poc-10",
+        "name": "Default closed on the projects",
+        "status": "idea",
+        "fileName": "10-default-closed-on-the-projects.md"
+      },
+      {
+        "id": "poc-11",
+        "name": "Some general slowness",
+        "status": "idea",
+        "fileName": "11-some-general-slowness.md"
+      },
+      {
+        "id": "poc-12",
+        "name": "currently viewed ticket/project should persist in url and restore",
+        "status": "idea",
+        "fileName": "12-currently-viewed-ticket-project-should-persist-in-url-and-restore.md"
+      },
+      {
+        "id": "poc-13",
+        "name": "Another Cool Test",
+        "status": "idea",
+        "fileName": "13-another-cool-test.md"
+      },
+      {
+        "id": "poc-14",
+        "name": "AGENTS.md reference for LLMs to look at to understand Overseer structure",
+        "status": "idea",
+        "type": "bug",
+        "fileName": "14-agents-md-reference-for-llms-to-look-at-to-understand-overseer-structure.md"
+      },
+      {
+        "id": "poc-15",
+        "name": "Change how we index projects",
+        "status": "done",
+        "type": "feature",
+        "fileName": "15-change-how-we-index-projects.md"
+      },
+      {
+        "id": "poc-16",
+        "name": "Support archiving tickets/projects.",
+        "status": "idea",
+        "type": "bug",
+        "fileName": "16-support-archiving-tickets-projects.md"
+      },
+      {
+        "id": "poc-17",
+        "name": "pre-commit hook to true up edited tickets",
+        "status": "idea",
+        "type": "feature",
+        "fileName": "17-pre-commit-hook-to-true-up-edited-tickets.md"
+      },
+      {
+        "id": "poc-18",
+        "name": "Typing in the name/metadata field is losing focus each key press",
+        "status": "idea",
+        "type": "bug",
+        "fileName": "18-typing-in-the-name-metadata-field-is-losing-focus-each-key-press.md"
+      },
+      {
+        "id": "poc-19",
+        "name": "Some buttons (ie create modal) don't show a hand/pointer on hover",
+        "status": "idea",
+        "type": "bug",
+        "fileName": "19-some-buttons-ie-create-modal-don-t-show-a-hand-pointer-on-hover.md"
+      },
+      {
+        "id": "mxskv",
+        "name": "Support reordering tickets - drag and drop",
+        "status": "idea",
+        "type": "bug",
+        "fileName": "mxskv-support-reordering-tickets-drag-and-drop.md"
+      }
+    ],
+    "subprojects": []
+  }
+}
