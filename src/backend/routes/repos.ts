@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { GLOBAL_CONFIG_PATH, getOrInitOverseerGlobalConfig, getOrInitRepoConfig } from '../config';
 import type { RepoConfig } from '../config';
-import { readRawProjectManifest, saveProjectManifest } from '../manifest';
+import { loadOrTrueUpProject } from '../manifest';
 import type { RouteContext } from '../types';
 
 // Backs the in-app folder browser in the Register Repository modal. Replaces the old
@@ -38,9 +38,9 @@ export function handleGetFsBrowse(req: any, res: any) {
   res.end(JSON.stringify({ path: targetPath, parent, directories }));
 }
 
-// Ensures a repo's docs/projects folders exist, and that the projects root has
-// its own manifest so it shows a friendly name instead of the raw folder name
-// once it's used as a landing view.
+// Ensures a repo's docs/projects folders exist, and trues up the projects root's
+// manifest against disk. Runs before the file watcher attaches, so a freshly
+// cloned repo (no _project.json anywhere) still gets scanned on startup.
 export function ensureRepoScaffold(repoRoot: string, repoConfig: RepoConfig) {
   const docsPath = path.join(repoRoot, repoConfig.docsDir);
   const projectsPath = path.join(repoRoot, repoConfig.projectsDir);
@@ -48,12 +48,7 @@ export function ensureRepoScaffold(repoRoot: string, repoConfig: RepoConfig) {
   if (!fs.existsSync(docsPath)) fs.mkdirSync(docsPath, { recursive: true });
   if (!fs.existsSync(projectsPath)) fs.mkdirSync(projectsPath, { recursive: true });
 
-  if (!readRawProjectManifest(projectsPath)) {
-    saveProjectManifest(projectsPath, {
-      name: path.basename(repoRoot),
-      projectmap: { tickets: [], subprojects: [] }
-    });
-  }
+  loadOrTrueUpProject(projectsPath, repoConfig);
 
   return { docsPath, projectsPath };
 }
