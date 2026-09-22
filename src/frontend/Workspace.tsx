@@ -1,8 +1,9 @@
-import { For, Index, Show } from 'solid-js';
+import { createEffect, createSignal, onCleanup, For, Index, Show } from 'solid-js';
 import type { Accessor, Setter } from 'solid-js';
 import { marked } from 'marked';
 import Icon from './Icon';
-import { colors, font } from './theme';
+import { colors, font, getStatusBadgeStyle, getTypeBadgeStyle } from './theme';
+import type { BadgeStyle } from './theme';
 import type { FrontmatterItem, RepoTreeNode, SchemaField } from './types';
 
 marked.setOptions({
@@ -52,6 +53,115 @@ function TabButton(props: { active: boolean; icon: 'eye' | 'pencil'; label: stri
   );
 }
 
+// A colored pill that looks like the read-only badges in Sidebar, clickable to
+// pick a new value. A native <select> can't get all the way there - Windows
+// Chrome/Edge ignore `cursor` on select elements entirely (always show the
+// default arrow), and <option> rows in the native popup only honor
+// background/color, not padding/margin/border-radius, so they can't read as
+// pills. This is a small hand-rolled dropdown instead (same
+// open/click-outside pattern as Sidebar's CheckboxFilterDropdown), which gives
+// full control over both.
+function QuickEditBadge(props: {
+  value: string;
+  options: string[];
+  placeholder: string;
+  badgeStyle: BadgeStyle | null;
+  getOptionStyle: (value: string) => BadgeStyle;
+  pillRadius: string;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = createSignal(false);
+  let containerRef: HTMLDivElement | undefined;
+
+  const handleClickOutside = (e: MouseEvent) => {
+    if (containerRef && !containerRef.contains(e.target as Node)) setOpen(false);
+  };
+
+  createEffect(() => {
+    if (open()) document.addEventListener('mousedown', handleClickOutside);
+    else document.removeEventListener('mousedown', handleClickOutside);
+  });
+  onCleanup(() => document.removeEventListener('mousedown', handleClickOutside));
+
+  return (
+    <div ref={containerRef} style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display: 'flex',
+          'align-items': 'center',
+          gap: '4px',
+          background: props.badgeStyle ? props.badgeStyle.bg : colors.paperDim,
+          color: props.badgeStyle ? props.badgeStyle.text : colors.inkFaint,
+          border: props.badgeStyle ? 'none' : `1px dashed ${colors.borderStrong}`,
+          padding: '4px 9px 4px 11px',
+          'border-radius': props.pillRadius,
+          'font-family': font.sans,
+          'font-size': '0.78rem',
+          'font-weight': 600,
+          cursor: 'pointer'
+        }}
+      >
+        {props.value || props.placeholder}
+        <Icon name="chevronDown" size={10} />
+      </button>
+
+      <Show when={open()}>
+        <div
+          style={{
+            position: 'absolute',
+            top: 'calc(100% + 5px)',
+            left: 0,
+            'z-index': 20,
+            background: colors.paperCard,
+            border: `1px solid ${colors.border}`,
+            'border-radius': '9px',
+            padding: '6px',
+            display: 'flex',
+            'flex-direction': 'column',
+            'align-items': 'flex-start',
+            gap: '4px',
+            'white-space': 'nowrap',
+            'box-shadow': '0 8px 20px rgba(30,42,56,.18)'
+          }}
+        >
+          <For each={props.options}>
+            {opt => {
+              const style = props.getOptionStyle(opt);
+              return (
+                <button
+                  type="button"
+                  onClick={() => {
+                    props.onChange(opt);
+                    setOpen(false);
+                  }}
+                  style={{
+                    background: style.bg,
+                    color: style.text,
+                    border: 'none',
+                    outline: opt === props.value ? `2px solid ${colors.blue}` : 'none',
+                    'outline-offset': '1px',
+                    padding: '5px 12px',
+                    'border-radius': props.pillRadius,
+                    'font-family': font.sans,
+                    'font-size': '0.78rem',
+                    'font-weight': 600,
+                    'text-align': 'left',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {opt}
+                </button>
+              );
+            }}
+          </For>
+        </div>
+      </Show>
+    </div>
+  );
+}
+
 export default function Workspace(props: WorkspaceProps) {
   const getActiveRepoConfig = () => {
     if (!props.activeRepoPath()) return null;
@@ -74,6 +184,28 @@ export default function Workspace(props: WorkspaceProps) {
   const updateAttrVal = (index: number, newVal: string) => {
     props.setAttributes(prev => prev.map((item, idx) => (idx === index ? { ...item, val: newVal } : item)));
   };
+
+  const getSchemaField = (key: string): SchemaField | undefined => {
+    const schema = getActiveRepoConfig()?.frontmatterSchema || [];
+    return schema.find((s: SchemaField) => s.name.trim().toLowerCase() === key);
+  };
+
+  const getAttrVal = (key: string) => props.attributes().find(a => a.key.trim().toLowerCase() === key)?.val || '';
+
+  // Quick edit from Preview: unlike updateAttrVal, this also handles a field that
+  // isn't on the ticket yet (status/type may be missing entirely), and saves
+  // immediately rather than staging into the buffer - there's no Save button
+  // visible from Preview.
+  const quickSetField = (key: string, value: string) => {
+    props.setAttributes(prev => {
+      const idx = prev.findIndex(a => a.key.trim().toLowerCase() === key);
+      if (idx === -1) return [...prev, { key, val: value }];
+      return prev.map((a, i) => (i === idx ? { ...a, val: value } : a));
+    });
+    props.onSave();
+  };
+
+  const nonBuiltInAttributes = () => props.attributes().filter(a => !['id', 'status', 'type'].includes(a.key.trim().toLowerCase()));
 
   return (
     <div
@@ -161,7 +293,7 @@ export default function Workspace(props: WorkspaceProps) {
             </div>
           </div>
 
-          <Show when={props.activeTab() === 'edit'}>
+          <Show when={props.saveStatus() || props.activeTab() === 'edit'}>
             <div style={{ display: 'flex', 'align-items': 'center', gap: '14px', 'flex-shrink': 0 }}>
               <Show when={props.saveStatus()}>
                 <span
@@ -174,24 +306,26 @@ export default function Workspace(props: WorkspaceProps) {
                   {props.saveStatus()}
                 </span>
               </Show>
-              <button
-                onClick={props.onSave}
-                disabled={props.isSaving()}
-                style={{
-                  background: colors.blue,
-                  color: colors.paperCard,
-                  border: 'none',
-                  padding: '9px 22px',
-                  'border-radius': '7px',
-                  cursor: props.isSaving() ? 'default' : 'pointer',
-                  'font-family': font.sans,
-                  'font-weight': 600,
-                  'font-size': '0.85rem',
-                  opacity: props.isSaving() ? 0.7 : 1
-                }}
-              >
-                {props.isSaving() ? 'Saving…' : 'Save changes'}
-              </button>
+              <Show when={props.activeTab() === 'edit'}>
+                <button
+                  onClick={props.onSave}
+                  disabled={props.isSaving()}
+                  style={{
+                    background: colors.blue,
+                    color: colors.paperCard,
+                    border: 'none',
+                    padding: '9px 22px',
+                    'border-radius': '7px',
+                    cursor: props.isSaving() ? 'default' : 'pointer',
+                    'font-family': font.sans,
+                    'font-weight': 600,
+                    'font-size': '0.85rem',
+                    opacity: props.isSaving() ? 0.7 : 1
+                  }}
+                >
+                  {props.isSaving() ? 'Saving…' : 'Save changes'}
+                </button>
+              </Show>
             </div>
           </Show>
         </div>
@@ -205,7 +339,12 @@ export default function Workspace(props: WorkspaceProps) {
         {/* TAB 1: PREVIEW */}
         <Show when={props.activeTab() === 'preview'}>
           <div style={{ flex: 1, display: 'flex', 'flex-direction': 'column' }}>
-            <Show when={props.attributes().length > 0}>
+            <Show
+              when={
+                !props.activeFilePath()?.endsWith('_project.md') &&
+                (getSchemaField('status') || getSchemaField('type') || nonBuiltInAttributes().length > 0)
+              }
+            >
               <div
                 style={{
                   display: 'flex',
@@ -217,7 +356,37 @@ export default function Workspace(props: WorkspaceProps) {
                   'border-radius': '9px'
                 }}
               >
-                <For each={props.attributes()}>
+                <Show when={getSchemaField('status')}>
+                  <QuickEditBadge
+                    value={getAttrVal('status')}
+                    options={getSchemaField('status')?.options || []}
+                    placeholder="Set status…"
+                    pillRadius="999px"
+                    badgeStyle={
+                      getAttrVal('status')
+                        ? getStatusBadgeStyle(getAttrVal('status'), getSchemaField('status')?.optionColors)
+                        : null
+                    }
+                    getOptionStyle={opt => getStatusBadgeStyle(opt, getSchemaField('status')?.optionColors)}
+                    onChange={v => quickSetField('status', v)}
+                  />
+                </Show>
+
+                <Show when={getSchemaField('type')}>
+                  <QuickEditBadge
+                    value={getAttrVal('type')}
+                    options={getSchemaField('type')?.options || []}
+                    placeholder="Set type…"
+                    pillRadius="3px"
+                    badgeStyle={
+                      getAttrVal('type') ? getTypeBadgeStyle(getAttrVal('type'), getSchemaField('type')?.optionColors) : null
+                    }
+                    getOptionStyle={opt => getTypeBadgeStyle(opt, getSchemaField('type')?.optionColors)}
+                    onChange={v => quickSetField('type', v)}
+                  />
+                </Show>
+
+                <For each={nonBuiltInAttributes()}>
                   {attr => (
                     <div
                       style={{

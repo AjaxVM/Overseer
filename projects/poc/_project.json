@@ -6,7 +6,7 @@
       {
         "id": "p9j6t",
         "name": "How to handle gitignore for project config file",
-        "status": "idea",
+        "status": "done",
         "type": "bug",
         "fileName": "p9j6t-how-to-handle-gitignore-for-project-config-file.md"
       },
@@ -52,7 +52,8 @@
       {
         "id": "poc-4",
         "name": "Allow quick edit of Frontmatter fields from Preview",
-        "status": "idea",
+        "status": "ready",
+        "type": "",
         "fileName": "4-allow-quick-edit-of-frontmatter-fields-from-preview.md"
       },
       {
@@ -178,6 +179,27 @@
         "status": "done",
         "type": "bug",
         "fileName": "mxskv-support-reordering-tickets-drag-and-drop.md"
+      },
+      {
+        "id": "gchtd",
+        "name": "More visible cues that a ticket is done/archived",
+        "status": "idea",
+        "type": "bug",
+        "fileName": "gchtd-more-visible-cues-that-a-ticket-is-done-archived.md"
+      },
+      {
+        "id": "azqm9",
+        "name": "refactor app to improve maintainability",
+        "status": "idea",
+        "type": "bug",
+        "fileName": "azqm9-refactor-app-to-improve-maintainability.md"
+      },
+      {
+        "id": "am7dd",
+        "name": "Show which app you are adding to in the create modal and edit repo modal",
+        "status": "idea",
+        "type": "bug",
+        "fileName": "am7dd-show-which-app-you-are-adding-to-in-the-create-modal-and-edit-repo-modal.md"
       }
     ],
     "subprojects": []

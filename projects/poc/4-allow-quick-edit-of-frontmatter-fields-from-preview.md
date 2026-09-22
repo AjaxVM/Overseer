@@ -1,9 +1,10 @@
 ---
 id: poc-4
-status: idea
+status: ready
 estimate: tiny
 complexity: simple
 priority: must
+type: 
 ---
 # Allow quick edit of Frontmatter fields from Preview
 
