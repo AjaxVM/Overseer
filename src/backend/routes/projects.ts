@@ -288,7 +288,7 @@ export function handlePostItemCreate(ctx: RouteContext, req: any, res: any) {
   });
   req.on('end', () => {
     try {
-      const { parentPath, repoPath, type, name } = JSON.parse(reqBody);
+      const { parentPath, repoPath, type, name, attributes } = JSON.parse(reqBody);
       if (!parentPath || !repoPath || !name.trim()) {
         throw new Error('parentPath, repoPath, and name are required.');
       }
@@ -344,11 +344,7 @@ export function handlePostItemCreate(ctx: RouteContext, req: any, res: any) {
         (repoConfig.frontmatterSchema || []).forEach((field: any) => {
           if (field.name === 'id') return;
           if (field.name === 'name') return;
-          if (field.type === 'enum' && field.options?.length > 0) {
-            initialAttributes[field.name] = field.options[0];
-          } else {
-            initialAttributes[field.name] = '';
-          }
+          initialAttributes[field.name] = attributes?.[field.name] ?? '';
         });
 
         const initialBody = `# ${name.trim()}\n\nWrite details or specifications here...`;

@@ -65,6 +65,10 @@ export default function App() {
   const [createType, setCreateType] = createSignal<'file' | 'directory'>('file');
   const [createName, setCreateName] = createSignal('');
   const [createErrorMsg, setCreateErrorMsg] = createSignal('');
+  const [createFieldValues, setCreateFieldValues] = createSignal<Record<string, string>>({});
+
+  const createSchema = () => tree().find(r => r.repoPath === createRepoPath())?.config?.frontmatterSchema || [];
+  const setCreateFieldValue = (name: string, value: string) => setCreateFieldValues(prev => ({ ...prev, [name]: value }));
 
   // Compares current edit-buffer contents against the last loaded/saved snapshot.
   const isDirty = () =>
@@ -269,6 +273,7 @@ export default function App() {
     setCreateType(defaultType);
     setCreateName('');
     setCreateErrorMsg('');
+    setCreateFieldValues({});
     setIsCreateModalOpen(true);
   };
 
@@ -283,7 +288,8 @@ export default function App() {
           parentPath: createParentPath(),
           repoPath: createRepoPath(),
           type: createType(),
-          name: createName()
+          name: createName(),
+          attributes: createFieldValues()
         })
       });
       const data = await res.json();
@@ -428,6 +434,9 @@ export default function App() {
         setCreateName={setCreateName}
         createParentPath={createParentPath}
         createErrorMsg={createErrorMsg}
+        schema={createSchema}
+        fieldValues={createFieldValues}
+        setFieldValue={setCreateFieldValue}
         onSubmit={handleCreateItem}
       />
 

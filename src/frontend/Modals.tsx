@@ -1,4 +1,4 @@
-import { createEffect, createSignal, Index, on, onCleanup, Show } from 'solid-js';
+import { createEffect, createSignal, For, Index, on, onCleanup, Show } from 'solid-js';
 import type { Accessor, JSX, Setter } from 'solid-js';
 import Icon from './Icon';
 import { colors, deriveBadgeStyle, font, isBuiltInEnumField } from './theme';
@@ -340,6 +340,9 @@ interface CreateItemModalProps {
   setCreateName: Setter<string>;
   createParentPath: Accessor<string>;
   createErrorMsg: Accessor<string>;
+  schema: Accessor<SchemaField[]>;
+  fieldValues: Accessor<Record<string, string>>;
+  setFieldValue: (name: string, value: string) => void;
   onSubmit: (e: Event) => void;
 }
 
@@ -374,6 +377,15 @@ export function CreateItemModal(props: CreateItemModalProps) {
     if (!isDirty() || window.confirm('Discard this unsaved ticket/sub-project?')) props.onClose();
   };
   useEscapeToClose(props.isOpen, confirmClose);
+
+  // Collapsed each time the modal opens, so the common case (accept schema
+  // defaults, just type a name) doesn't have to look at it.
+  const [fieldsOpen, setFieldsOpen] = createSignal(false);
+  createEffect(
+    on(props.isOpen, open => {
+      if (open) setFieldsOpen(false);
+    })
+  );
 
   return (
     <Show when={props.isOpen()}>
@@ -420,6 +432,60 @@ export function CreateItemModal(props: CreateItemModalProps) {
               {props.createParentPath()}
             </div>
           </div>
+
+          <Show when={props.createType() === 'file' && props.schema().length > 0}>
+            <div style={{ 'margin-bottom': '16px', border: `1px solid ${colors.border}`, 'border-radius': '7px', overflow: 'hidden' }}>
+              <div
+                onClick={() => setFieldsOpen(o => !o)}
+                style={{
+                  display: 'flex',
+                  'align-items': 'center',
+                  'justify-content': 'space-between',
+                  padding: '9px 12px',
+                  cursor: 'pointer',
+                  'user-select': 'none',
+                  background: colors.paperDim
+                }}
+              >
+                <span style={{ 'font-family': font.sans, 'font-size': '0.82rem', 'font-weight': 600, color: colors.inkSoft }}>
+                  Set fields ({props.schema().length})
+                </span>
+                <Icon name={fieldsOpen() ? 'chevronDown' : 'chevronRight'} size={13} style={{ color: colors.inkFaint }} />
+              </div>
+
+              <Show when={fieldsOpen()}>
+                <div style={{ padding: '12px', display: 'flex', 'flex-direction': 'column', gap: '10px' }}>
+                  <For each={props.schema()}>
+                    {field => (
+                      <div>
+                        <label style={labelStyle}>{field.name}</label>
+                        <Show
+                          when={field.type === 'enum'}
+                          fallback={
+                            <input
+                              type={field.type === 'number' ? 'number' : 'text'}
+                              value={props.fieldValues()[field.name] || ''}
+                              onInput={e => props.setFieldValue(field.name, e.currentTarget.value)}
+                              style={inputStyle}
+                            />
+                          }
+                        >
+                          <select
+                            value={props.fieldValues()[field.name] || ''}
+                            onChange={e => props.setFieldValue(field.name, e.currentTarget.value)}
+                            style={inputStyle}
+                          >
+                            <option value="">—</option>
+                            <For each={field.options || []}>{opt => <option value={opt}>{opt}</option>}</For>
+                          </select>
+                        </Show>
+                      </div>
+                    )}
+                  </For>
+                </div>
+              </Show>
+            </div>
+          </Show>
 
           <Show when={props.createErrorMsg()}>
             <div style={errorTextStyle}>{props.createErrorMsg()}</div>

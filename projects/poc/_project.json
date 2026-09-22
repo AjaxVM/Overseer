@@ -65,7 +65,7 @@
       {
         "id": "5x7e2",
         "name": "When creating ticket, have an accordion in the modal to set fields",
-        "status": "idea",
+        "status": "done",
         "type": "bug",
         "fileName": "5x7e2-when-creating-ticket-have-an-accordion-in-the-modal-to-set-fields.md"
       },
@@ -200,6 +200,27 @@
         "status": "idea",
         "type": "bug",
         "fileName": "am7dd-show-which-app-you-are-adding-to-in-the-create-modal-and-edit-repo-modal.md"
+      },
+      {
+        "id": "5t5p3",
+        "name": "Ability to delete tickets or projects",
+        "status": "idea",
+        "type": "bug",
+        "fileName": "5t5p3-ability-to-delete-tickets-or-projects.md"
+      },
+      {
+        "id": "byvj8",
+        "name": "Add quick edit of ticket name",
+        "status": "idea",
+        "type": "bug",
+        "fileName": "byvj8-add-quick-edit-of-ticket-name.md"
+      },
+      {
+        "id": "6ztxx",
+        "name": "Testing",
+        "status": "planning",
+        "type": "feature",
+        "fileName": "6ztxx-testing.md"
       }
     ],
     "subprojects": []
