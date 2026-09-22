@@ -6,6 +6,7 @@ import {
   loadOrTrueUpProject,
   readRawProjectManifest,
   saveProjectManifest,
+  buildShallowManifest,
   generateShortId,
   stringifyFrontmatter,
   syncTicketToManifest,
@@ -163,10 +164,22 @@ export function handleGetProject(ctx: RouteContext, req: any, res: any) {
   // Serve the cached manifest as-is - don't block navigation on a live readdir/stat
   // walk of every ticket and sub-project on every request. The file watcher
   // (src/backend/index.ts) trues this up in the background off the request path and
-  // pushes a projects-update event when something actually changed. Only fall back to
-  // a synchronous true-up for a directory that has never been touched at all, since
-  // there's nothing cached yet to serve.
-  const manifest = readRawProjectManifest(projectPath) || loadOrTrueUpProject(projectPath, targetRepoConfig);
+  // pushes a projects-update event when something actually changed. A directory that
+  // has never been touched at all has nothing cached yet - serve a cheap filename-only
+  // shallow manifest immediately and run the real true-up in the background instead of
+  // blocking this response on a full frontmatter-parse walk.
+  const cachedManifest = readRawProjectManifest(projectPath);
+  const manifest = cachedManifest || buildShallowManifest(projectPath);
+  if (!cachedManifest) {
+    setImmediate(() => {
+      try {
+        loadOrTrueUpProject(projectPath, targetRepoConfig);
+      } catch (e) {
+        // Best-effort background true-up - the shallow manifest already served this request.
+      }
+      ctx.server.ws.send({ type: 'custom', event: 'projects-update' });
+    });
+  }
 
   let description = '';
   const descFile =

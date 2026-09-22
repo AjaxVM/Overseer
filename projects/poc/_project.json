@@ -52,7 +52,7 @@
       {
         "id": "poc-4",
         "name": "Allow quick edit of Frontmatter fields from Preview",
-        "status": "ready",
+        "status": "done",
         "type": "",
         "fileName": "4-allow-quick-edit-of-frontmatter-fields-from-preview.md"
       },
@@ -72,7 +72,7 @@
       {
         "id": "poc-11",
         "name": "Some general slowness",
-        "status": "idea",
+        "status": "done",
         "fileName": "11-some-general-slowness.md"
       },
       {

@@ -1,6 +1,6 @@
 ---
 id: poc-4
-status: ready
+status: done
 estimate: tiny
 complexity: simple
 priority: must

@@ -197,6 +197,57 @@ export function saveProjectManifest(dir: string, manifest: ProjectManifest): voi
   fs.writeFileSync(targetPath, serializeManifest(manifest), 'utf-8');
 }
 
+// Cheap, read-only stand-in for loadOrTrueUpProject, used only on a project's first-ever
+// request (no _project.json on disk yet) so navigation never blocks on a full
+// readdir+frontmatter-parse walk. Derives everything from filenames alone (no file
+// reads), never writes to disk, and is superseded moments later by the real
+// loadOrTrueUpProject run in the background (see routes/projects.ts).
+export function buildShallowManifest(projectDir: string): ProjectManifest {
+  const entries = fs.readdirSync(projectDir, { withFileTypes: true });
+
+  const subprojects: SubProjectSummary[] = entries
+    .filter(entry => entry.isDirectory() && !entry.name.startsWith('.'))
+    .map(entry => ({ name: entry.name, slug: entry.name, path: path.join(projectDir, entry.name) }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const ignoredFiles = new Set(['_project.md', 'description.md', 'notes.md', 'comments.md']);
+  const tickets: TicketSummary[] = entries
+    .filter(
+      entry =>
+        entry.isFile() &&
+        entry.name.toLowerCase().endsWith('.md') &&
+        !ignoredFiles.has(entry.name.toLowerCase())
+    )
+    .map(entry => {
+      const filenameParts = entry.name.replace(/\.md$/i, '').split('-');
+      return {
+        id: filenameParts[0] || '',
+        name: filenameParts.slice(1).join(' ') || entry.name,
+        status: 'idea',
+        fileName: entry.name,
+        filePath: path.join(projectDir, entry.name)
+      };
+    })
+    .sort((a, b) => {
+      const numA = parseInt(a.fileName.split('-')[0], 10);
+      const numB = parseInt(b.fileName.split('-')[0], 10);
+      if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+      return a.name.localeCompare(b.name);
+    });
+
+  const descriptionFile = fs.existsSync(path.join(projectDir, '_project.md'))
+    ? '_project.md'
+    : fs.existsSync(path.join(projectDir, 'description.md'))
+    ? 'description.md'
+    : undefined;
+
+  return {
+    name: path.basename(projectDir),
+    descriptionFile,
+    projectmap: { tickets, subprojects }
+  };
+}
+
 export function loadOrTrueUpProject(projectDir: string, _repoConfig?: any): ProjectManifest {
   if (!fs.existsSync(projectDir)) {
     return {
