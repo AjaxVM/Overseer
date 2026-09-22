@@ -484,13 +484,12 @@ export default function Sidebar(props: SidebarProps) {
               <div style={{ display: 'flex', 'flex-direction': 'column', gap: '1px' }}>
                 <For each={filteredAndSortedTickets()}>
                   {(ticket: TicketSummary) => {
-                    const isSelected = props.activeFilePath() === ticket.filePath;
                     const statusStyle = getStatusBadgeStyle(ticket.status, getFieldOptionColors('status'));
                     const typeStyle = getTypeBadgeStyle(ticket.type, getFieldOptionColors('type'));
 
                     return (
                       <ListRow
-                        selected={isSelected}
+                        selected={props.activeFilePath() === ticket.filePath}
                         onClick={() => props.onOpenFile(ticket.filePath, props.activeRepoPath()!)}
                         title={`#${ticket.id}: ${ticket.name}`}
                         icon={
@@ -499,7 +498,7 @@ export default function Sidebar(props: SidebarProps) {
                               'font-size': '0.68rem',
                               'font-family': font.mono,
                               'font-weight': 500,
-                              color: isSelected ? colors.blue : colors.inkFaint,
+                              color: props.activeFilePath() === ticket.filePath ? colors.blue : colors.inkFaint,
                               'flex-shrink': 0
                             }}
                           >
