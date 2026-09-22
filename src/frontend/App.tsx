@@ -101,6 +101,14 @@ export default function App() {
       const data: ProjectDetailsResponse = await res.json();
       if (!res.ok) throw new Error((data as any).error || 'Failed to load project');
 
+      // A project with nothing of its own but a single sub-project is just an extra
+      // click before you reach anything - skip straight into it. This never hides
+      // root-level tickets, since it only fires when there are none (poc/fuzuh).
+      const { tickets, subprojects } = data.manifest.projectmap;
+      if (tickets.length === 0 && subprojects.length === 1) {
+        return loadProject(subprojects[0].path, repoPath, autoOpenOverview);
+      }
+
       setProjectData(data);
       setActiveProjectPath(projectPath);
       localStorage.setItem('overseer:activeProject', projectPath);
@@ -170,8 +178,8 @@ export default function App() {
     }
   });
 
-  // Selecting a repo always lands on its projects root, not a sub-project - tickets
-  // can live directly at that root, so drilling into the first sub-project would hide them.
+  // Lands on the repo's projects root; loadProject itself skips straight into a single
+  // sub-project when the root has nothing else of its own to show (poc/fuzuh).
   const handleSelectRepo = (repoPath: string) => {
     setActiveRepoPath(repoPath);
     const repoNode = tree().find(r => r.repoPath === repoPath);
@@ -245,6 +253,21 @@ export default function App() {
       setSaveStatus(`Error: ${err.message}`);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const reorderProject = async (body: { ticketOrder?: string[]; subprojectOrder?: string[] }) => {
+    const pPath = activeProjectPath();
+    if (!pPath) return;
+    try {
+      await fetch('/api/project/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectPath: pPath, ...body })
+      });
+      loadProject(pPath, activeRepoPath() || undefined);
+    } catch (err: any) {
+      console.error('Failed to reorder project:', err);
     }
   };
 
@@ -374,6 +397,8 @@ export default function App() {
         onOpenCreateModal={openCreateModal}
         onOpenRepoConfigModal={openRepoConfigModal}
         onAddRepoClick={() => setIsModalOpen(true)}
+        onReorderTickets={order => reorderProject({ ticketOrder: order })}
+        onReorderSubprojects={order => reorderProject({ subprojectOrder: order })}
       />
 
       <Workspace

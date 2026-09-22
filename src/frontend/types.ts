@@ -32,7 +32,6 @@ export interface ProjectManifest {
   name: string;
   id?: string;
   descriptionFile?: string;
-  childOrder?: string[];
   projectmap: {
     tickets: TicketSummary[];
     subprojects: SubProjectSummary[];

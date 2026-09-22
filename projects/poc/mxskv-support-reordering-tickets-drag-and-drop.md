@@ -1,7 +1,7 @@
 ---
 id: mxskv
 name: Support reordering tickets - drag and drop
-status: idea
+status: done
 type: bug
 estimate: tiny
 complexity: simple

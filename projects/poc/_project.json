@@ -1,20 +1,33 @@
 {
   "name": "poc",
   "descriptionFile": "_project.md",
-  "childOrder": [],
   "projectmap": {
     "tickets": [
       {
-        "id": "poc-1",
-        "name": "Add type as a default frontmatter field",
+        "id": "p9j6t",
+        "name": "How to handle gitignore for project config file",
+        "status": "idea",
+        "type": "bug",
+        "fileName": "p9j6t-how-to-handle-gitignore-for-project-config-file.md"
+      },
+      {
+        "id": "fuzuh",
+        "name": "If only one project in a repo, auto open that on changing to that repo/startup",
         "status": "done",
-        "fileName": "1-add-type-as-a-default-frontmatter-field.md"
+        "type": "bug",
+        "fileName": "fuzuh-if-only-one-project-in-a-repo-auto-open-that-on-changing-to-that-repo-startup.md"
       },
       {
         "id": "poc-2",
         "name": "Fix ticket and folder name display",
         "status": "done",
         "fileName": "2-fix-ticket-and-folder-name-display.md"
+      },
+      {
+        "id": "poc-1",
+        "name": "Add type as a default frontmatter field",
+        "status": "done",
+        "fileName": "1-add-type-as-a-default-frontmatter-field.md"
       },
       {
         "id": "2uxcm",
@@ -43,13 +56,6 @@
         "fileName": "4-allow-quick-edit-of-frontmatter-fields-from-preview.md"
       },
       {
-        "id": "p9j6t",
-        "name": "How to handle gitignore for project config file",
-        "status": "idea",
-        "type": "bug",
-        "fileName": "p9j6t-how-to-handle-gitignore-for-project-config-file.md"
-      },
-      {
         "id": "poc-5",
         "name": "Support assignable fields",
         "status": "idea",
@@ -61,6 +67,12 @@
         "status": "idea",
         "type": "bug",
         "fileName": "5x7e2-when-creating-ticket-have-an-accordion-in-the-modal-to-set-fields.md"
+      },
+      {
+        "id": "poc-11",
+        "name": "Some general slowness",
+        "status": "idea",
+        "fileName": "11-some-general-slowness.md"
       },
       {
         "id": "poc-6",
@@ -98,12 +110,6 @@
         "name": "Default closed on the projects",
         "status": "idea",
         "fileName": "10-default-closed-on-the-projects.md"
-      },
-      {
-        "id": "poc-11",
-        "name": "Some general slowness",
-        "status": "idea",
-        "fileName": "11-some-general-slowness.md"
       },
       {
         "id": "poc-12",
@@ -146,6 +152,13 @@
         "fileName": "17-pre-commit-hook-to-true-up-edited-tickets.md"
       },
       {
+        "id": "wfjmd",
+        "name": "Support more filtering - specifically type/status",
+        "status": "idea",
+        "type": "bug",
+        "fileName": "wfjmd-support-more-filtering-specifically-type-status.md"
+      },
+      {
         "id": "poc-18",
         "name": "Typing in the name/metadata field is losing focus each key press",
         "status": "idea",
@@ -162,7 +175,7 @@
       {
         "id": "mxskv",
         "name": "Support reordering tickets - drag and drop",
-        "status": "idea",
+        "status": "done",
         "type": "bug",
         "fileName": "mxskv-support-reordering-tickets-drag-and-drop.md"
       }

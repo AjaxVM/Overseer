@@ -50,7 +50,7 @@ export function ensureRepoScaffold(repoRoot: string, repoConfig: RepoConfig) {
 
   // True up each top-level project dir's own manifest first, so a pre-existing project
   // folder (fresh clone, manually created dir) gets its _project.json eagerly instead of
-  // only on first individual visit - without this, childOrder writes silently no-op in
+  // only on first individual visit - without this, reorder writes silently no-op in
   // handlePostProjectReorder for any top-level project never yet navigated into.
   fs.readdirSync(projectsPath, { withFileTypes: true })
     .filter(entry => entry.isDirectory() && !entry.name.startsWith('.'))

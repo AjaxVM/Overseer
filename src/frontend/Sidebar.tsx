@@ -16,6 +16,8 @@ interface SidebarProps {
   onOpenCreateModal: (parentPath: string, repoPath: string) => void;
   onOpenRepoConfigModal: (repoNode: RepoTreeNode) => void;
   onAddRepoClick: () => void;
+  onReorderTickets: (fileNameOrder: string[]) => void;
+  onReorderSubprojects: (slugOrder: string[]) => void;
 }
 
 function SectionHeader(props: { icon: 'folder' | 'ticket' | 'book'; label: string; count: number; open: boolean; onToggle: () => void }) {
@@ -44,20 +46,45 @@ function SectionHeader(props: { icon: 'folder' | 'ticket' | 'book'; label: strin
 const rowHoverStyle = { background: colors.paperCard, borderLeftColor: colors.borderStrong };
 const rowIdleStyle = { background: 'transparent', borderLeftColor: 'transparent' };
 
-function ListRow(props: { icon: JSX.Element; label: string; selected?: boolean; trailing?: JSX.Element; onClick: () => void; title?: string }) {
+function ListRow(props: {
+  icon: JSX.Element;
+  label: string;
+  selected?: boolean;
+  trailing?: JSX.Element;
+  onClick: () => void;
+  title?: string;
+  draggable?: boolean;
+  dragging?: boolean;
+  dragOver?: boolean;
+  onDragStart?: () => void;
+  onDragOver?: (e: DragEvent) => void;
+  onDrop?: () => void;
+  onDragEnd?: () => void;
+}) {
   return (
     <div
       onClick={props.onClick}
       title={props.title}
+      draggable={props.draggable}
+      onDragStart={() => props.onDragStart?.()}
+      onDragOver={e => props.onDragOver?.(e)}
+      onDrop={e => {
+        e.preventDefault();
+        props.onDrop?.();
+      }}
+      onDragEnd={() => props.onDragEnd?.()}
       style={{
         display: 'flex',
         'align-items': 'center',
         gap: '8px',
         padding: '7px 8px 7px 9px',
         'border-left': `3px solid ${props.selected ? colors.blue : 'transparent'}`,
+        'border-top': `2px solid ${props.dragOver ? colors.blue : 'transparent'}`,
         background: props.selected ? colors.blueTint : 'transparent',
         'border-radius': '0 6px 6px 0',
-        cursor: 'pointer',
+        // Pointer by default - the click is the more important affordance. Only swaps to
+        // a grab cursor for the row actively being dragged.
+        cursor: props.dragging ? 'grabbing' : 'pointer',
         'font-family': font.sans,
         'font-size': '0.84rem',
         color: props.selected ? colors.blue : colors.ink,
@@ -87,6 +114,44 @@ export default function Sidebar(props: SidebarProps) {
   const [sortOption, setSortOption] = createSignal<'manifest' | 'status' | 'name' | 'id'>(
     (localStorage.getItem('overseer:sortOption') as any) || 'manifest'
   );
+
+  // Drag-and-drop reordering (poc/mxskv). Tickets can only be reordered while showing
+  // the manifest's own order, unfiltered - dragging within a status/name/id sort or a
+  // search result wouldn't have a sensible order to persist.
+  const [draggedTicket, setDraggedTicket] = createSignal<string | null>(null);
+  const [dragOverTicket, setDragOverTicket] = createSignal<string | null>(null);
+  const canReorderTickets = () => sortOption() === 'manifest' && !ticketSearch().trim();
+
+  const handleTicketDrop = (targetFileName: string) => {
+    const draggedFileName = draggedTicket();
+    setDraggedTicket(null);
+    setDragOverTicket(null);
+    if (!draggedFileName || draggedFileName === targetFileName || !canReorderTickets()) return;
+    const order = filteredAndSortedTickets().map(t => t.fileName);
+    const fromIdx = order.indexOf(draggedFileName);
+    const toIdx = order.indexOf(targetFileName);
+    if (fromIdx === -1 || toIdx === -1) return;
+    order.splice(fromIdx, 1);
+    order.splice(toIdx, 0, draggedFileName);
+    props.onReorderTickets(order);
+  };
+
+  const [draggedSubproject, setDraggedSubproject] = createSignal<string | null>(null);
+  const [dragOverSubproject, setDragOverSubproject] = createSignal<string | null>(null);
+
+  const handleSubprojectDrop = (targetSlug: string) => {
+    const draggedSlug = draggedSubproject();
+    setDraggedSubproject(null);
+    setDragOverSubproject(null);
+    if (!draggedSlug || draggedSlug === targetSlug) return;
+    const order = (props.projectData()?.manifest.projectmap.subprojects || []).map(s => s.slug);
+    const fromIdx = order.indexOf(draggedSlug);
+    const toIdx = order.indexOf(targetSlug);
+    if (fromIdx === -1 || toIdx === -1) return;
+    order.splice(fromIdx, 1);
+    order.splice(toIdx, 0, draggedSlug);
+    props.onReorderSubprojects(order);
+  };
 
   const togglePanel = (panel: 'subprojects' | 'tickets' | 'docs') => {
     if (panel === 'subprojects') {
@@ -399,6 +464,19 @@ export default function Sidebar(props: SidebarProps) {
                     title={sub.name}
                     onClick={() => props.onNavigateProject(sub.path)}
                     trailing={<Icon name="chevronRight" size={13} style={{ color: colors.inkFaint }} />}
+                    draggable={true}
+                    dragging={draggedSubproject() === sub.slug}
+                    dragOver={dragOverSubproject() === sub.slug}
+                    onDragStart={() => setDraggedSubproject(sub.slug)}
+                    onDragOver={e => {
+                      e.preventDefault();
+                      setDragOverSubproject(sub.slug);
+                    }}
+                    onDrop={() => handleSubprojectDrop(sub.slug)}
+                    onDragEnd={() => {
+                      setDraggedSubproject(null);
+                      setDragOverSubproject(null);
+                    }}
                   />
                 )}
               </For>
@@ -492,6 +570,20 @@ export default function Sidebar(props: SidebarProps) {
                         selected={props.activeFilePath() === ticket.filePath}
                         onClick={() => props.onOpenFile(ticket.filePath, props.activeRepoPath()!)}
                         title={`#${ticket.id}: ${ticket.name}`}
+                        draggable={canReorderTickets()}
+                        dragging={draggedTicket() === ticket.fileName}
+                        dragOver={dragOverTicket() === ticket.fileName}
+                        onDragStart={() => setDraggedTicket(ticket.fileName)}
+                        onDragOver={e => {
+                          if (!canReorderTickets()) return;
+                          e.preventDefault();
+                          setDragOverTicket(ticket.fileName);
+                        }}
+                        onDrop={() => handleTicketDrop(ticket.fileName)}
+                        onDragEnd={() => {
+                          setDraggedTicket(null);
+                          setDragOverTicket(null);
+                        }}
                         icon={
                           <span
                             style={{

@@ -20,7 +20,6 @@ export interface ProjectManifest {
   name: string;
   id?: string;
   descriptionFile?: string;
-  childOrder?: string[];
   projectmap: {
     tickets: TicketSummary[];
     subprojects: SubProjectSummary[];
@@ -46,7 +45,6 @@ interface PersistedProjectManifest {
   name: string;
   id?: string;
   descriptionFile?: string;
-  childOrder?: string[];
   projectmap: {
     tickets: PersistedTicketSummary[];
     subprojects: PersistedSubProjectSummary[];
@@ -65,7 +63,6 @@ function toPersistedManifest(manifest: ProjectManifest): PersistedProjectManifes
     name: manifest.name,
     id: manifest.id,
     descriptionFile: manifest.descriptionFile,
-    childOrder: manifest.childOrder,
     projectmap: {
       tickets: manifest.projectmap.tickets.map(({ filePath, ...rest }) => rest),
       subprojects: manifest.projectmap.subprojects.map(({ path: _path, ...rest }) => rest)
@@ -75,6 +72,25 @@ function toPersistedManifest(manifest: ProjectManifest): PersistedProjectManifes
 
 function serializeManifest(manifest: ProjectManifest): string {
   return JSON.stringify(toPersistedManifest(manifest), null, 2) + '\n';
+}
+
+// Applies an explicit key order to a list, keyed by keyFn(item). Keys not present in
+// `items` are ignored; items not mentioned in `order` keep their relative position at
+// the end. Used both to persist a drag-and-drop reorder and, during true-up, to keep a
+// freshly-rescanned list in its previously-known order (array order is the order - see
+// poc/mxskv) rather than re-deriving it from a separate ordering field on every scan.
+export function reorderByKeys<T>(items: T[], order: string[], keyFn: (item: T) => string): T[] {
+  const byKey = new Map(items.map(item => [keyFn(item), item]));
+  const ordered: T[] = [];
+  order.forEach(key => {
+    const item = byKey.get(key);
+    if (item) {
+      ordered.push(item);
+      byKey.delete(key);
+    }
+  });
+  byKey.forEach(item => ordered.push(item));
+  return ordered;
 }
 
 export function generateShortId(prefix?: string): string {
@@ -168,7 +184,6 @@ export function readRawProjectManifest(dir: string): ProjectManifest | null {
           : fs.existsSync(path.join(dir, 'description.md'))
           ? 'description.md'
           : undefined),
-      childOrder: data.childOrder || [],
       projectmap: { tickets, subprojects }
     };
   } catch (e) {
@@ -200,7 +215,7 @@ export function loadOrTrueUpProject(projectDir: string, _repoConfig?: any): Proj
   // 1. Detect subprojects. A sub-directory's own manifest mtime gates whether we
   // re-read it - without this, every navigation re-read every sub-project's
   // _project.json on every request, even when nothing under it had changed.
-  const subprojects: SubProjectSummary[] = [];
+  const scannedSubprojects = new Map<string, SubProjectSummary>();
   entries
     .filter(entry => entry.isDirectory() && !entry.name.startsWith('.'))
     .forEach(entry => {
@@ -215,7 +230,7 @@ export function loadOrTrueUpProject(projectDir: string, _repoConfig?: any): Proj
 
       const cached = subManifestCache.get(subManifestPath);
       if (cached && subMtime !== undefined && cached.mtime === subMtime) {
-        subprojects.push({ name: cached.name, slug: entry.name, path: subDirPath });
+        scannedSubprojects.set(entry.name, { name: cached.name, slug: entry.name, path: subDirPath });
         return;
       }
 
@@ -227,12 +242,20 @@ export function loadOrTrueUpProject(projectDir: string, _repoConfig?: any): Proj
       if (subMtime !== undefined) {
         subManifestCache.set(subManifestPath, { mtime: subMtime, name: subName });
       }
-      subprojects.push({
-        name: subName,
-        slug: entry.name,
-        path: subDirPath
-      });
+      scannedSubprojects.set(entry.name, { name: subName, slug: entry.name, path: subDirPath });
     });
+
+  // A never-before-seen subproject falls back to alphabetical; a known one keeps its
+  // existing position in projectmap.subprojects (see reorderByKeys - array order is the
+  // order, poc/mxskv) instead of being re-sorted on every scan.
+  const scannedSubprojectsList = Array.from(scannedSubprojects.values()).sort((a, b) =>
+    a.name.localeCompare(b.name)
+  );
+  const subprojects = reorderByKeys(
+    scannedSubprojectsList,
+    (existingManifest.projectmap?.subprojects || []).map(s => s.slug),
+    s => s.slug
+  );
 
   // 2. Detect tickets (.md files excluding _project.md / description.md / notes.md / comments.md)
   const ignoredFiles = new Set(['_project.md', 'description.md', 'notes.md', 'comments.md']);
@@ -243,7 +266,7 @@ export function loadOrTrueUpProject(projectDir: string, _repoConfig?: any): Proj
       !ignoredFiles.has(entry.name.toLowerCase())
   );
 
-  const updatedTickets: TicketSummary[] = [];
+  const scannedTickets = new Map<string, TicketSummary>();
 
   ticketFiles.forEach(fileEntry => {
     const filePath = path.join(projectDir, fileEntry.name);
@@ -252,7 +275,7 @@ export function loadOrTrueUpProject(projectDir: string, _repoConfig?: any): Proj
       const cached = ticketCache.get(filePath);
 
       if (cached && cached.mtime === stat.mtimeMs) {
-        updatedTickets.push(cached.summary);
+        scannedTickets.set(fileEntry.name, cached.summary);
       } else {
         const raw = fs.readFileSync(filePath, 'utf-8');
         const { attributes, body } = parseFrontmatter(raw);
@@ -274,36 +297,27 @@ export function loadOrTrueUpProject(projectDir: string, _repoConfig?: any): Proj
           filePath
         };
         ticketCache.set(filePath, { mtime: stat.mtimeMs, summary: ticketSummary });
-        updatedTickets.push(ticketSummary);
+        scannedTickets.set(fileEntry.name, ticketSummary);
       }
     } catch (e) {
       // Skip files that fail to stat or read
     }
   });
 
-  // Sort tickets based on childOrder if present, else numeric/alphabetical
-  const childOrder = existingManifest.childOrder || [];
-  if (childOrder.length > 0) {
-    const orderMap = new Map<string, number>();
-    childOrder.forEach((id, idx) => orderMap.set(id, idx));
-
-    updatedTickets.sort((a, b) => {
-      const orderA = orderMap.has(a.id) ? orderMap.get(a.id)! : 999999;
-      const orderB = orderMap.has(b.id) ? orderMap.get(b.id)! : 999999;
-      if (orderA !== orderB) return orderA - orderB;
-      const numA = parseInt(a.fileName.split('-')[0], 10);
-      const numB = parseInt(b.fileName.split('-')[0], 10);
-      if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
-      return a.name.localeCompare(b.name);
-    });
-  } else {
-    updatedTickets.sort((a, b) => {
-      const numA = parseInt(a.fileName.split('-')[0], 10);
-      const numB = parseInt(b.fileName.split('-')[0], 10);
-      if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
-      return a.name.localeCompare(b.name);
-    });
-  }
+  // A never-before-seen ticket falls back to numeric-prefix-then-alphabetical; a known
+  // one keeps its existing position in projectmap.tickets instead of being re-sorted on
+  // every scan (array order is the order - childOrder is gone, see poc/mxskv).
+  const scannedTicketsList = Array.from(scannedTickets.values()).sort((a, b) => {
+    const numA = parseInt(a.fileName.split('-')[0], 10);
+    const numB = parseInt(b.fileName.split('-')[0], 10);
+    if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+    return a.name.localeCompare(b.name);
+  });
+  const updatedTickets = reorderByKeys(
+    scannedTicketsList,
+    (existingManifest.projectmap?.tickets || []).map(t => t.fileName),
+    t => t.fileName
+  );
 
   const descFile = fs.existsSync(path.join(projectDir, '_project.md'))
     ? '_project.md'

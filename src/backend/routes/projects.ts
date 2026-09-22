@@ -8,7 +8,8 @@ import {
   saveProjectManifest,
   generateShortId,
   stringifyFrontmatter,
-  syncTicketToManifest
+  syncTicketToManifest,
+  reorderByKeys
 } from '../manifest';
 import type { RouteContext } from '../types';
 
@@ -233,6 +234,9 @@ export function handlePostProjectDescription(req: any, res: any) {
   });
 }
 
+// ticketOrder is a list of ticket fileNames, subprojectOrder a list of subproject slugs,
+// each in the new desired order - either or both may be sent. Array order in
+// projectmap.tickets/subprojects is the order (no separate ordering field - poc/mxskv).
 export function handlePostProjectReorder(req: any, res: any) {
   let reqBody = '';
   req.on('data', (chunk: string) => {
@@ -240,15 +244,21 @@ export function handlePostProjectReorder(req: any, res: any) {
   });
   req.on('end', () => {
     try {
-      const { projectPath, childOrder } = JSON.parse(reqBody);
+      const { projectPath, ticketOrder, subprojectOrder } = JSON.parse(reqBody);
       if (!projectPath || !fs.existsSync(projectPath)) {
         throw new Error('Valid projectPath required');
       }
       const manifest = readRawProjectManifest(projectPath);
-      if (manifest) {
-        manifest.childOrder = childOrder;
-        saveProjectManifest(projectPath, manifest);
+      if (!manifest) {
+        throw new Error('Project manifest not found');
       }
+      if (ticketOrder) {
+        manifest.projectmap.tickets = reorderByKeys(manifest.projectmap.tickets, ticketOrder, t => t.fileName);
+      }
+      if (subprojectOrder) {
+        manifest.projectmap.subprojects = reorderByKeys(manifest.projectmap.subprojects, subprojectOrder, s => s.slug);
+      }
+      saveProjectManifest(projectPath, manifest);
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ success: true }));
     } catch (e: any) {
