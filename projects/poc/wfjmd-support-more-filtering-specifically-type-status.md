@@ -1,7 +1,7 @@
 ---
 id: wfjmd
 name: Support more filtering - specifically type/status
-status: idea
+status: done
 type: bug
 estimate: tiny
 complexity: simple

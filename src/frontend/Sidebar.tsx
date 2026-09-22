@@ -1,7 +1,8 @@
-import { createSignal, For, Show } from 'solid-js';
+import { createEffect, createSignal, onCleanup, For, Show } from 'solid-js';
 import type { Accessor, JSX } from 'solid-js';
 import Icon from './Icon';
 import { colors, font, getStatusBadgeStyle, getTypeBadgeStyle } from './theme';
+import type { BadgeStyle } from './theme';
 import type { DocTreeEntry, ProjectDetailsResponse, RepoTreeNode, TicketSummary } from './types';
 
 interface SidebarProps {
@@ -106,6 +107,173 @@ function ListRow(props: {
   );
 }
 
+// Checkbox popover for the sidebar's status/type filters. Checked = included, so
+// excluding a single value (the common case, e.g. "hide done") is one click instead
+// of checking every other option in an inclusive multi-select.
+function CheckboxFilterDropdown(props: {
+  label: string;
+  options: string[];
+  excluded: Set<string>;
+  onChange: (next: Set<string>) => void;
+  getBadgeStyle: (value: string) => BadgeStyle;
+}) {
+  const [open, setOpen] = createSignal(false);
+  let containerRef: HTMLDivElement | undefined;
+
+  const handleClickOutside = (e: MouseEvent) => {
+    if (containerRef && !containerRef.contains(e.target as Node)) setOpen(false);
+  };
+
+  createEffect(() => {
+    if (open()) document.addEventListener('mousedown', handleClickOutside);
+    else document.removeEventListener('mousedown', handleClickOutside);
+  });
+  onCleanup(() => document.removeEventListener('mousedown', handleClickOutside));
+
+  const summary = () => {
+    const includedCount = props.options.length - props.excluded.size;
+    if (props.excluded.size === 0) return `All ${props.label}`;
+    if (includedCount === 0) return `No ${props.label}`;
+    return `${includedCount}/${props.options.length} ${props.label}`;
+  };
+
+  return (
+    <div ref={containerRef} style={{ position: 'relative', flex: 1, 'min-width': 0 }}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: '100%',
+          'box-sizing': 'border-box',
+          height: '28px',
+          display: 'flex',
+          'align-items': 'center',
+          'justify-content': 'space-between',
+          gap: '4px',
+          'font-family': font.sans,
+          'font-size': '0.74rem',
+          border: `1px solid ${colors.border}`,
+          'border-radius': '7px',
+          padding: '0 6px',
+          background: colors.paperCard,
+          color: colors.inkSoft,
+          cursor: 'pointer'
+        }}
+      >
+        <span style={{ overflow: 'hidden', 'text-overflow': 'ellipsis', 'white-space': 'nowrap' }}>{summary()}</span>
+        <Icon name="chevronDown" size={11} style={{ color: colors.inkFaint }} />
+      </button>
+      <Show when={open()}>
+        <div
+          style={{
+            position: 'absolute',
+            top: 'calc(100% + 4px)',
+            left: 0,
+            right: 0,
+            'z-index': 20,
+            background: colors.paperCard,
+            border: `1px solid ${colors.border}`,
+            'border-radius': '7px',
+            'box-shadow': '0 4px 14px rgba(30,42,56,.18)',
+            padding: '4px',
+            'max-height': '220px',
+            'overflow-y': 'auto'
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              'align-items': 'center',
+              gap: '6px',
+              padding: '2px 6px 6px',
+              'margin-bottom': '2px',
+              'border-bottom': `1px solid ${colors.border}`
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => props.onChange(new Set())}
+              style={{
+                border: 'none',
+                background: 'transparent',
+                padding: 0,
+                'font-family': font.sans,
+                'font-size': '0.72rem',
+                'font-weight': 600,
+                color: colors.blue,
+                cursor: 'pointer'
+              }}
+            >
+              All
+            </button>
+            <span style={{ color: colors.inkFaint, 'font-size': '0.72rem' }}>|</span>
+            <button
+              type="button"
+              onClick={() => props.onChange(new Set(props.options))}
+              style={{
+                border: 'none',
+                background: 'transparent',
+                padding: 0,
+                'font-family': font.sans,
+                'font-size': '0.72rem',
+                'font-weight': 600,
+                color: colors.blue,
+                cursor: 'pointer'
+              }}
+            >
+              None
+            </button>
+          </div>
+          <For each={props.options}>
+            {opt => {
+              const badgeStyle = props.getBadgeStyle(opt);
+              return (
+                <label
+                  style={{
+                    display: 'flex',
+                    'align-items': 'center',
+                    gap: '6px',
+                    padding: '4px 6px',
+                    'border-radius': '5px',
+                    cursor: 'pointer',
+                    'font-family': font.sans,
+                    'font-size': '0.78rem',
+                    color: colors.ink
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={!props.excluded.has(opt)}
+                    onChange={() => {
+                      const next = new Set(props.excluded);
+                      if (next.has(opt)) next.delete(opt);
+                      else next.add(opt);
+                      props.onChange(next);
+                    }}
+                    style={{ cursor: 'pointer', margin: 0 }}
+                  />
+                  <span
+                    style={{
+                      background: badgeStyle.bg,
+                      color: badgeStyle.text,
+                      padding: '1px 6px',
+                      'border-radius': '3px',
+                      'font-weight': 600,
+                      'font-size': '0.64rem'
+                    }}
+                  >
+                    {opt}
+                  </span>
+                </label>
+              );
+            }}
+          </For>
+        </div>
+      </Show>
+    </div>
+  );
+}
+
 export default function Sidebar(props: SidebarProps) {
   const [isSubprojectsOpen, setIsSubprojectsOpen] = createSignal(localStorage.getItem('overseer:panel:subprojects') !== 'false');
   const [isTicketsOpen, setIsTicketsOpen] = createSignal(localStorage.getItem('overseer:panel:tickets') !== 'false');
@@ -114,13 +282,23 @@ export default function Sidebar(props: SidebarProps) {
   const [sortOption, setSortOption] = createSignal<'manifest' | 'status' | 'name' | 'id'>(
     (localStorage.getItem('overseer:sortOption') as any) || 'manifest'
   );
+  const loadExcludedSet = (key: string): Set<string> => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(key) || '[]'));
+    } catch {
+      return new Set();
+    }
+  };
+  const [statusExcluded, setStatusExcluded] = createSignal<Set<string>>(loadExcludedSet('overseer:filter:status:excluded'));
+  const [typeExcluded, setTypeExcluded] = createSignal<Set<string>>(loadExcludedSet('overseer:filter:type:excluded'));
 
   // Drag-and-drop reordering (poc/mxskv). Tickets can only be reordered while showing
   // the manifest's own order, unfiltered - dragging within a status/name/id sort or a
   // search result wouldn't have a sensible order to persist.
   const [draggedTicket, setDraggedTicket] = createSignal<string | null>(null);
   const [dragOverTicket, setDragOverTicket] = createSignal<string | null>(null);
-  const canReorderTickets = () => sortOption() === 'manifest' && !ticketSearch().trim();
+  const canReorderTickets = () =>
+    sortOption() === 'manifest' && !ticketSearch().trim() && statusExcluded().size === 0 && typeExcluded().size === 0;
 
   const handleTicketDrop = (targetFileName: string) => {
     const draggedFileName = draggedTicket();
@@ -174,6 +352,16 @@ export default function Sidebar(props: SidebarProps) {
     localStorage.setItem('overseer:sortOption', newSort);
   };
 
+  const setExcludedPersist = (setSet: (s: Set<string>) => void, key: string, next: Set<string>) => {
+    setSet(next);
+    localStorage.setItem(key, JSON.stringify([...next]));
+  };
+
+  const setStatusExcludedPersist = (next: Set<string>) =>
+    setExcludedPersist(setStatusExcluded, 'overseer:filter:status:excluded', next);
+  const setTypeExcludedPersist = (next: Set<string>) =>
+    setExcludedPersist(setTypeExcluded, 'overseer:filter:type:excluded', next);
+
   const getParentFolderName = () => {
     const pPath = props.projectData()?.parentPath;
     if (!pPath) return '';
@@ -194,6 +382,41 @@ export default function Sidebar(props: SidebarProps) {
     return field?.optionColors;
   };
 
+  // Schema options first (stable even with zero matching tickets), plus any stray
+  // values actually present on tickets but missing from the schema, so nothing
+  // becomes an unreachable filter target.
+  const getFieldOptions = (fieldName: 'status' | 'type'): string[] => {
+    const repoNode = props.tree().find(r => r.repoPath === props.activeRepoPath());
+    const field = repoNode?.config?.frontmatterSchema?.find(f => f.name.trim().toLowerCase() === fieldName);
+    const schemaOptions = field?.options || [];
+    const rawTickets = props.projectData()?.manifest.projectmap.tickets || [];
+    const values = new Set(rawTickets.map(t => t[fieldName]).filter((v): v is string => Boolean(v)));
+    const strayValues = [...values].filter(v => !schemaOptions.includes(v));
+    return [...schemaOptions, ...strayValues];
+  };
+
+  // Drop any excluded value that no longer exists for the active project/repo (e.g.
+  // after switching to one with a different schema), so a stale exclusion doesn't
+  // silently keep hiding nothing - or, once reused, hide the wrong thing.
+  const pruneExcluded = (
+    excluded: Accessor<Set<string>>,
+    setExcluded: (s: Set<string>) => void,
+    key: string,
+    fieldName: 'status' | 'type'
+  ) => {
+    const options = new Set(getFieldOptions(fieldName));
+    const pruned = new Set([...excluded()].filter(v => options.has(v)));
+    if (pruned.size !== excluded().size) {
+      setExcluded(pruned);
+      localStorage.setItem(key, JSON.stringify([...pruned]));
+    }
+  };
+
+  createEffect(() => {
+    pruneExcluded(statusExcluded, setStatusExcluded, 'overseer:filter:status:excluded', 'status');
+    pruneExcluded(typeExcluded, setTypeExcluded, 'overseer:filter:type:excluded', 'type');
+  });
+
   const filteredAndSortedTickets = (): TicketSummary[] => {
     const rawTickets = props.projectData()?.manifest.projectmap.tickets || [];
     const query = ticketSearch().toLowerCase().trim();
@@ -208,6 +431,8 @@ export default function Sidebar(props: SidebarProps) {
           (t.type && t.type.toLowerCase().includes(query))
       );
     }
+    if (statusExcluded().size > 0) filtered = filtered.filter(t => !statusExcluded().has(t.status));
+    if (typeExcluded().size > 0) filtered = filtered.filter(t => !t.type || !typeExcluded().has(t.type));
 
     const copy = [...filtered];
     switch (sortOption()) {
@@ -501,10 +726,12 @@ export default function Sidebar(props: SidebarProps) {
                   style={{
                     flex: 1,
                     'min-width': 0,
+                    'box-sizing': 'border-box',
+                    height: '28px',
                     display: 'flex',
                     'align-items': 'center',
                     gap: '6px',
-                    padding: '5px 9px',
+                    padding: '0 9px',
                     border: `1px solid ${colors.border}`,
                     'border-radius': '7px',
                     background: colors.paperCard
@@ -532,11 +759,13 @@ export default function Sidebar(props: SidebarProps) {
                   value={sortOption()}
                   onChange={e => handleSortChange(e.currentTarget.value as any)}
                   style={{
+                    'box-sizing': 'border-box',
+                    height: '28px',
                     'font-family': font.sans,
                     'font-size': '0.74rem',
                     border: `1px solid ${colors.border}`,
                     'border-radius': '7px',
-                    padding: '5px 6px',
+                    padding: '0 6px',
                     background: colors.paperCard,
                     color: colors.inkSoft,
                     'flex-shrink': 0,
@@ -548,6 +777,23 @@ export default function Sidebar(props: SidebarProps) {
                   <option value="name">Name</option>
                   <option value="id">ID</option>
                 </select>
+              </div>
+
+              <div style={{ display: 'flex', gap: '6px', 'align-items': 'center', 'margin-bottom': '8px' }}>
+                <CheckboxFilterDropdown
+                  label="statuses"
+                  options={getFieldOptions('status')}
+                  excluded={statusExcluded()}
+                  onChange={setStatusExcludedPersist}
+                  getBadgeStyle={v => getStatusBadgeStyle(v, getFieldOptionColors('status'))}
+                />
+                <CheckboxFilterDropdown
+                  label="types"
+                  options={getFieldOptions('type')}
+                  excluded={typeExcluded()}
+                  onChange={setTypeExcludedPersist}
+                  getBadgeStyle={v => getTypeBadgeStyle(v, getFieldOptionColors('type'))}
+                />
               </div>
             </Show>
 
