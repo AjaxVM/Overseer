@@ -12,6 +12,9 @@ export interface FrontmatterFieldConfig {
   // the frontend for the built-in `status` field's badge coloring (see
   // src/frontend/theme.ts's deriveBadgeStyle). Passed through as opaque data here.
   optionColors?: Record<string, string>;
+  // Maps an enum option value to a 1-2 char uppercase shorthand, used only by the
+  // built-in `assignee` field's compact circle badge. Passed through as opaque data here.
+  optionShorthands?: Record<string, string>;
 }
 
 export interface RepoConfig {
@@ -73,6 +76,11 @@ export const DEFAULT_REPO_CONFIG: RepoConfig = {
       name: 'priority',
       type: 'enum',
       options: ['must', 'should', 'could', 'maybe']
+    },
+    {
+      name: 'assignee',
+      type: 'enum',
+      options: []
     }
   ]
 };
@@ -88,10 +96,17 @@ export function getOrInitRepoConfig(repoRoot: string): RepoConfig {
   try {
     const raw = fs.readFileSync(repoConfigPath, 'utf-8');
     const parsed = JSON.parse(raw);
+    const parsedSchema: FrontmatterFieldConfig[] = parsed.frontmatterSchema || [];
+    // Merge in any built-in schema field (by name) missing from an older on-disk
+    // config, so newly-added built-ins (e.g. `assignee`) reach already-scaffolded
+    // repos without requiring a manual Settings edit.
+    const missingBuiltIns = DEFAULT_REPO_CONFIG.frontmatterSchema.filter(
+      d => !parsedSchema.some(p => p.name === d.name)
+    );
     return {
       docsDir: parsed.docsDir || DEFAULT_REPO_CONFIG.docsDir,
       projectsDir: parsed.projectsDir || DEFAULT_REPO_CONFIG.projectsDir,
-      frontmatterSchema: parsed.frontmatterSchema || DEFAULT_REPO_CONFIG.frontmatterSchema,
+      frontmatterSchema: [...parsedSchema, ...missingBuiltIns],
       idFormat: parsed.idFormat || DEFAULT_REPO_CONFIG.idFormat || 'short-uuid'
     };
   } catch (e) {

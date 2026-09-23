@@ -3,7 +3,7 @@ import type { Accessor, Setter } from 'solid-js';
 import { marked } from 'marked';
 import Icon from './Icon';
 import InlineEditText from './InlineEditText';
-import { colors, font, getStatusBadgeStyle, getTypeBadgeStyle } from './theme';
+import { colors, deriveShorthand, font, getAssigneeBadgeStyle, getStatusBadgeStyle, getTypeBadgeStyle } from './theme';
 import type { BadgeStyle } from './theme';
 import type { FrontmatterItem, RepoTreeNode, SchemaField } from './types';
 
@@ -30,6 +30,8 @@ interface WorkspaceProps {
   canDeleteActive: Accessor<boolean>;
   onDeleteActive: () => void;
   onRenameActiveItem: (newName: string) => void;
+  pendingSync: Accessor<boolean>;
+  onSyncProject: () => void;
 }
 
 function TabButton(props: { active: boolean; icon: 'eye' | 'pencil'; label: string; onClick: () => void }) {
@@ -73,9 +75,17 @@ function QuickEditBadge(props: {
   getOptionStyle: (value: string) => BadgeStyle;
   pillRadius: string;
   onChange: (value: string) => void;
+  // 'circle' (assignee): the trigger is a small initials circle instead of a
+  // value-bearing pill, and the popup lists full names as plain text (with a leading
+  // color swatch) rather than solid-color-filled option rows - names should read as
+  // text everywhere except the compact circle itself.
+  variant?: 'pill' | 'circle';
+  shorthand?: string;
+  getOptionShorthand?: (value: string) => string;
 }) {
   const [open, setOpen] = createSignal(false);
   let containerRef: HTMLDivElement | undefined;
+  const isCircle = () => props.variant === 'circle';
 
   const handleClickOutside = (e: MouseEvent) => {
     if (containerRef && !containerRef.contains(e.target as Node)) setOpen(false);
@@ -91,24 +101,44 @@ function QuickEditBadge(props: {
     <div ref={containerRef} style={{ position: 'relative' }}>
       <button
         type="button"
+        title={isCircle() ? props.value || props.placeholder : undefined}
         onClick={() => setOpen(o => !o)}
-        style={{
-          display: 'flex',
-          'align-items': 'center',
-          gap: '4px',
-          background: props.badgeStyle ? props.badgeStyle.bg : colors.paperDim,
-          color: props.badgeStyle ? props.badgeStyle.text : colors.inkFaint,
-          border: props.badgeStyle ? 'none' : `1px dashed ${colors.borderStrong}`,
-          padding: '4px 9px 4px 11px',
-          'border-radius': props.pillRadius,
-          'font-family': font.sans,
-          'font-size': '0.78rem',
-          'font-weight': 600,
-          cursor: 'pointer'
-        }}
+        style={
+          isCircle()
+            ? {
+                display: 'flex',
+                'align-items': 'center',
+                'justify-content': 'center',
+                width: '26px',
+                height: '26px',
+                background: props.badgeStyle ? props.badgeStyle.bg : colors.paperDim,
+                color: props.badgeStyle ? props.badgeStyle.text : colors.inkFaint,
+                border: props.badgeStyle ? 'none' : `1px dashed ${colors.borderStrong}`,
+                'border-radius': '50%',
+                'font-family': font.sans,
+                'font-size': '0.72rem',
+                'font-weight': 700,
+                cursor: 'pointer',
+                padding: 0
+              }
+            : {
+                display: 'flex',
+                'align-items': 'center',
+                gap: '4px',
+                background: props.badgeStyle ? props.badgeStyle.bg : colors.paperDim,
+                color: props.badgeStyle ? props.badgeStyle.text : colors.inkFaint,
+                border: props.badgeStyle ? 'none' : `1px dashed ${colors.borderStrong}`,
+                padding: '4px 9px 4px 11px',
+                'border-radius': props.pillRadius,
+                'font-family': font.sans,
+                'font-size': '0.78rem',
+                'font-weight': 600,
+                cursor: 'pointer'
+              }
+        }
       >
-        {props.value || props.placeholder}
-        <Icon name="chevronDown" size={10} />
+        {isCircle() ? props.shorthand || '?' : props.value || props.placeholder}
+        {!isCircle() && <Icon name="chevronDown" size={10} />}
       </button>
 
       <Show when={open()}>
@@ -124,7 +154,7 @@ function QuickEditBadge(props: {
             padding: '6px',
             display: 'flex',
             'flex-direction': 'column',
-            'align-items': 'flex-start',
+            'align-items': 'stretch',
             gap: '4px',
             'white-space': 'nowrap',
             'box-shadow': '0 8px 20px rgba(30,42,56,.18)'
@@ -134,29 +164,80 @@ function QuickEditBadge(props: {
             {opt => {
               const style = props.getOptionStyle(opt);
               return (
-                <button
-                  type="button"
-                  onClick={() => {
-                    props.onChange(opt);
-                    setOpen(false);
-                  }}
-                  style={{
-                    background: style.bg,
-                    color: style.text,
-                    border: 'none',
-                    outline: opt === props.value ? `2px solid ${colors.blue}` : 'none',
-                    'outline-offset': '1px',
-                    padding: '5px 12px',
-                    'border-radius': props.pillRadius,
-                    'font-family': font.sans,
-                    'font-size': '0.78rem',
-                    'font-weight': 600,
-                    'text-align': 'left',
-                    cursor: 'pointer'
-                  }}
+                <Show
+                  when={isCircle()}
+                  fallback={
+                    <button
+                      type="button"
+                      onClick={() => {
+                        props.onChange(opt);
+                        setOpen(false);
+                      }}
+                      style={{
+                        background: style.bg,
+                        color: style.text,
+                        border: 'none',
+                        outline: opt === props.value ? `2px solid ${colors.blue}` : 'none',
+                        'outline-offset': '1px',
+                        padding: '5px 12px',
+                        'border-radius': props.pillRadius,
+                        'font-family': font.sans,
+                        'font-size': '0.78rem',
+                        'font-weight': 600,
+                        'text-align': 'left',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {opt}
+                    </button>
+                  }
                 >
-                  {opt}
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      props.onChange(opt);
+                      setOpen(false);
+                    }}
+                    style={{
+                      display: 'flex',
+                      'align-items': 'center',
+                      gap: '7px',
+                      background: 'transparent',
+                      color: colors.ink,
+                      border: 'none',
+                      outline: opt === props.value ? `2px solid ${colors.blue}` : 'none',
+                      'outline-offset': '1px',
+                      padding: '5px 10px',
+                      'border-radius': '6px',
+                      'font-family': font.sans,
+                      'font-size': '0.78rem',
+                      'font-weight': 600,
+                      'text-align': 'left',
+                      cursor: 'pointer'
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = colors.paperDim)}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        'align-items': 'center',
+                        'justify-content': 'center',
+                        width: '18px',
+                        height: '18px',
+                        'flex-shrink': 0,
+                        'border-radius': '50%',
+                        background: style.bg,
+                        color: style.text,
+                        'font-size': '0.6rem',
+                        'font-weight': 700
+                      }}
+                    >
+                      {props.getOptionShorthand?.(opt) || ''}
+                    </span>
+                    {opt}
+                  </button>
+                </Show>
               );
             }}
           </For>
@@ -209,7 +290,8 @@ export default function Workspace(props: WorkspaceProps) {
     props.onSave();
   };
 
-  const nonBuiltInAttributes = () => props.attributes().filter(a => !['id', 'status', 'type'].includes(a.key.trim().toLowerCase()));
+  const nonBuiltInAttributes = () =>
+    props.attributes().filter(a => !['id', 'status', 'type', 'assignee'].includes(a.key.trim().toLowerCase()));
 
   return (
     <div
@@ -223,6 +305,44 @@ export default function Workspace(props: WorkspaceProps) {
         'min-width': '0'
       }}
     >
+      <Show when={props.pendingSync()}>
+        <div
+          style={{
+            display: 'flex',
+            'align-items': 'center',
+            'justify-content': 'space-between',
+            gap: '14px',
+            'margin-bottom': '18px',
+            padding: '10px 16px',
+            background: colors.bronzeTint,
+            border: `1px solid ${colors.border}`,
+            'border-radius': '7px'
+          }}
+        >
+          <span style={{ 'font-size': '0.85rem', 'font-family': font.sans, color: colors.bronze }}>
+            External changes detected outside the app - the list below reflects them, but they haven't been saved to
+            disk yet.
+          </span>
+          <button
+            onClick={props.onSyncProject}
+            style={{
+              background: colors.bronze,
+              color: '#FFFFFF',
+              border: 'none',
+              padding: '7px 14px',
+              'border-radius': '7px',
+              cursor: 'pointer',
+              'font-family': font.sans,
+              'font-weight': 600,
+              'font-size': '0.82rem',
+              'flex-shrink': 0
+            }}
+          >
+            Sync now
+          </button>
+        </div>
+      </Show>
+
       <Show
         when={props.activeFilePath()}
         fallback={
@@ -368,7 +488,7 @@ export default function Workspace(props: WorkspaceProps) {
             <Show
               when={
                 !props.activeFilePath()?.endsWith('_project.md') &&
-                (getSchemaField('status') || getSchemaField('type') || nonBuiltInAttributes().length > 0)
+                (getSchemaField('status') || getSchemaField('type') || getSchemaField('assignee') || nonBuiltInAttributes().length > 0)
               }
             >
               <div
@@ -409,6 +529,32 @@ export default function Workspace(props: WorkspaceProps) {
                     }
                     getOptionStyle={opt => getTypeBadgeStyle(opt, getSchemaField('type')?.optionColors)}
                     onChange={v => quickSetField('type', v)}
+                  />
+                </Show>
+
+                <Show when={getSchemaField('assignee')}>
+                  <QuickEditBadge
+                    variant="circle"
+                    value={getAttrVal('assignee')}
+                    options={getSchemaField('assignee')?.options || []}
+                    placeholder="Unassigned"
+                    pillRadius="999px"
+                    shorthand={
+                      getAttrVal('assignee')
+                        ? getSchemaField('assignee')?.optionShorthands?.[getAttrVal('assignee')] ||
+                          deriveShorthand(getAttrVal('assignee'))
+                        : undefined
+                    }
+                    getOptionShorthand={opt =>
+                      getSchemaField('assignee')?.optionShorthands?.[opt] || deriveShorthand(opt)
+                    }
+                    badgeStyle={
+                      getAttrVal('assignee')
+                        ? getAssigneeBadgeStyle(getAttrVal('assignee'), getSchemaField('assignee')?.optionColors)
+                        : null
+                    }
+                    getOptionStyle={opt => getAssigneeBadgeStyle(opt, getSchemaField('assignee')?.optionColors)}
+                    onChange={v => quickSetField('assignee', v)}
                   />
                 </Show>
 

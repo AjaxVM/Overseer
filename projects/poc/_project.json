@@ -215,6 +215,13 @@
         "status": "done",
         "type": "",
         "fileName": "dz55s-save-filters-in-localstorage-and-persist-on-navigating-projects-repos.md"
+      },
+      {
+        "id": "qk7pf",
+        "name": "Track assignee history per status transition",
+        "status": "idea",
+        "type": "feature",
+        "fileName": "qk7pf-track-assignee-history-per-status-transition.md"
       }
     ],
     "subprojects": []

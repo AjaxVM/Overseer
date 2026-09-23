@@ -11,6 +11,7 @@ export interface SchemaField {
   // Maps an enum option value to a theme.ts SwatchName - only surfaced in the UI for
   // the built-in `status` field for now (see Modals.tsx's RepoConfigModal).
   optionColors?: Record<string, string>;
+  optionShorthands?: Record<string, string>;
 }
 
 export interface TicketSummary {
@@ -18,6 +19,7 @@ export interface TicketSummary {
   name: string;
   status: string;
   type?: string;
+  assignee?: string;
   fileName: string;
   filePath: string;
 }
@@ -44,6 +46,10 @@ export interface ProjectDetailsResponse {
   parentPath: string | null;
   manifest: ProjectManifest;
   description?: string;
+  // True when the file watcher noticed external changes (e.g. a hand-edited ticket, or
+  // a git checkout/merge) that differ from what's committed to _project.json, but held
+  // them in memory instead of writing them - see backend manifest.ts's pendingManifestCache.
+  pendingSync?: boolean;
 }
 
 export interface RepoConfig {

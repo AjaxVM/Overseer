@@ -261,6 +261,11 @@ export default function App() {
     if (import.meta.hot) {
       import.meta.hot.on('projects-update', () => {
         fetchTree();
+        // fetchTree only refreshes the sidebar tree - the open project's own manifest
+        // (and its pendingSync flag, see handleSyncProject) needs its own refetch, or a
+        // background true-up would never show up until the user navigates away and back.
+        const openProjectPath = activeProjectPath();
+        if (openProjectPath) loadProject(openProjectPath, activeRepoPath() || undefined);
       });
     }
   });
@@ -504,6 +509,24 @@ export default function App() {
     }
   };
 
+  const handleSyncProject = async () => {
+    const projectPath = activeProjectPath();
+    if (!projectPath) return;
+    try {
+      const res = await fetch('/api/project/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectPath })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to sync project');
+      loadProject(projectPath, activeRepoPath() || undefined);
+      fetchTree();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
   const handleRenameActiveItem = (newName: string) => {
     if (activeFilePath()?.endsWith('_project.md')) {
       handleRenameProject(newName);
@@ -583,7 +606,8 @@ export default function App() {
                 .map(s => s.trim())
                 .filter(Boolean)
             : undefined,
-        optionColors: field.type === 'enum' ? field.optionColors : undefined
+        optionColors: field.type === 'enum' ? field.optionColors : undefined,
+        optionShorthands: field.type === 'enum' ? field.optionShorthands : undefined
       }))
       .filter(f => f.name.length > 0);
 
@@ -664,6 +688,8 @@ export default function App() {
         canDeleteActive={canDeleteActive}
         onDeleteActive={handleDeleteActiveItem}
         onRenameActiveItem={handleRenameActiveItem}
+        pendingSync={() => projectData()?.pendingSync ?? false}
+        onSyncProject={handleSyncProject}
       />
 
       <AddRepoModal

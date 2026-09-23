@@ -10,7 +10,9 @@ import {
   generateShortId,
   stringifyFrontmatter,
   syncTicketToManifest,
-  reorderByKeys
+  reorderByKeys,
+  getPendingManifest,
+  commitPendingManifest
 } from '../manifest';
 import type { RouteContext } from '../types';
 
@@ -169,7 +171,6 @@ export function handleGetProject(ctx: RouteContext, req: any, res: any) {
   // shallow manifest immediately and run the real true-up in the background instead of
   // blocking this response on a full frontmatter-parse walk.
   const cachedManifest = readRawProjectManifest(projectPath);
-  const manifest = cachedManifest || buildShallowManifest(projectPath);
   if (!cachedManifest) {
     setImmediate(() => {
       try {
@@ -180,6 +181,12 @@ export function handleGetProject(ctx: RouteContext, req: any, res: any) {
       ctx.server.ws.send({ type: 'custom', event: 'projects-update' });
     });
   }
+
+  // The passive watcher never writes _project.json on its own (see loadOrTrueUpProject's
+  // `persist: false` path) - a reconciled-but-unwritten result surfaces here instead, so
+  // the UI shows the live data plus a "sync now" affordance rather than the stale disk copy.
+  const pendingManifest = getPendingManifest(projectPath);
+  const manifest = pendingManifest || cachedManifest || buildShallowManifest(projectPath);
 
   let description = '';
   const descFile =
@@ -213,7 +220,8 @@ export function handleGetProject(ctx: RouteContext, req: any, res: any) {
       repoPath: matchedRepoRoot,
       parentPath,
       manifest,
-      description
+      description,
+      pendingSync: !!pendingManifest
     })
   );
 }
@@ -277,6 +285,30 @@ export function handlePostProjectReorder(req: any, res: any) {
     } catch (e: any) {
       res.statusCode = 400;
       res.end(JSON.stringify({ error: e.message }));
+    }
+  });
+}
+
+// Persists a pending true-up (see getPendingManifest) that the passive watcher computed
+// but held back from writing, once the user explicitly asks to sync it in.
+export function handlePostProjectSync(ctx: RouteContext, req: any, res: any) {
+  let reqBody = '';
+  req.on('data', (chunk: string) => {
+    reqBody += chunk;
+  });
+  req.on('end', () => {
+    try {
+      const { projectPath } = JSON.parse(reqBody);
+      if (!projectPath || !fs.existsSync(projectPath)) {
+        throw new Error('Valid projectPath required');
+      }
+      const synced = commitPendingManifest(projectPath);
+      ctx.server.ws.send({ type: 'custom', event: 'projects-update' });
+      res.setHeader('Content-Type', 'application/json');
+      return res.end(JSON.stringify({ success: true, synced }));
+    } catch (e: any) {
+      res.statusCode = 400;
+      return res.end(JSON.stringify({ error: e.message }));
     }
   });
 }

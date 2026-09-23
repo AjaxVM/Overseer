@@ -8,6 +8,7 @@ import {
   handlePostProjectDescription,
   handlePostProjectReorder,
   handlePostProjectRename,
+  handlePostProjectSync,
   handlePostItemCreate,
   handlePostItemDelete
 } from './routes/projects';
@@ -70,7 +71,7 @@ export function overseer() {
           watcherTimeout = setTimeout(() => {
             for (const [dir, cfg] of pendingTrueUps) {
               try {
-                loadOrTrueUpProject(dir, cfg);
+                loadOrTrueUpProject(dir, cfg, { persist: false });
               } catch (e) {
                 // Best-effort background refresh - a live nav request still falls back
                 // to a synchronous true-up if nothing is cached yet for that directory.
@@ -89,6 +90,7 @@ export function overseer() {
           if (req.url === '/api/project/description' && req.method === 'POST') return handlePostProjectDescription(req, res);
           if (req.url === '/api/project/reorder' && req.method === 'POST') return handlePostProjectReorder(req, res);
           if (req.url === '/api/project/rename' && req.method === 'POST') return handlePostProjectRename(ctx, req, res);
+          if (req.url === '/api/project/sync' && req.method === 'POST') return handlePostProjectSync(ctx, req, res);
           if (req.url.startsWith('/api/file/read') && req.method === 'GET') return handleGetFileRead(req, res);
           if (req.url === '/api/file/save' && req.method === 'POST') return handlePostFileSave(req, res);
           if (req.url === '/api/item/create' && req.method === 'POST') return handlePostItemCreate(ctx, req, res);

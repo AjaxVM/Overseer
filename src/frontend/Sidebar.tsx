@@ -1,7 +1,7 @@
 import { createEffect, createSignal, onCleanup, For, Show } from 'solid-js';
 import type { Accessor, JSX } from 'solid-js';
 import Icon from './Icon';
-import { colors, font, getStatusBadgeStyle, getTypeBadgeStyle } from './theme';
+import { colors, deriveShorthand, font, getAssigneeBadgeStyle, getStatusBadgeStyle, getTypeBadgeStyle } from './theme';
 import type { BadgeStyle } from './theme';
 import type { DocTreeEntry, ProjectDetailsResponse, RepoTreeNode, SubProjectSummary, TicketSummary } from './types';
 
@@ -326,6 +326,9 @@ export default function Sidebar(props: SidebarProps) {
   };
   const [statusExcluded, setStatusExcluded] = createSignal<Set<string>>(loadExcludedSet('overseer:filter:status:excluded'));
   const [typeExcluded, setTypeExcluded] = createSignal<Set<string>>(loadExcludedSet('overseer:filter:type:excluded'));
+  const [assigneeExcluded, setAssigneeExcluded] = createSignal<Set<string>>(
+    loadExcludedSet('overseer:filter:assignee:excluded')
+  );
 
   // Drag-and-drop reordering (poc/mxskv). Tickets can only be reordered while showing
   // the manifest's own order, unfiltered - dragging within a status/name/id sort or a
@@ -333,7 +336,11 @@ export default function Sidebar(props: SidebarProps) {
   const [draggedTicket, setDraggedTicket] = createSignal<string | null>(null);
   const [dragOverTicket, setDragOverTicket] = createSignal<string | null>(null);
   const canReorderTickets = () =>
-    sortOption() === 'manifest' && !ticketSearch().trim() && statusExcluded().size === 0 && typeExcluded().size === 0;
+    sortOption() === 'manifest' &&
+    !ticketSearch().trim() &&
+    statusExcluded().size === 0 &&
+    typeExcluded().size === 0 &&
+    assigneeExcluded().size === 0;
 
   const handleTicketDrop = (targetFileName: string) => {
     const draggedFileName = draggedTicket();
@@ -396,6 +403,8 @@ export default function Sidebar(props: SidebarProps) {
     setExcludedPersist(setStatusExcluded, 'overseer:filter:status:excluded', next);
   const setTypeExcludedPersist = (next: Set<string>) =>
     setExcludedPersist(setTypeExcluded, 'overseer:filter:type:excluded', next);
+  const setAssigneeExcludedPersist = (next: Set<string>) =>
+    setExcludedPersist(setAssigneeExcluded, 'overseer:filter:assignee:excluded', next);
 
   const getParentFolderName = () => {
     const pPath = props.projectData()?.parentPath;
@@ -417,10 +426,16 @@ export default function Sidebar(props: SidebarProps) {
     return field?.optionColors;
   };
 
+  const getFieldOptionShorthands = (fieldName: string): Record<string, string> | undefined => {
+    const repoNode = props.tree().find(r => r.repoPath === props.activeRepoPath());
+    const field = repoNode?.config?.frontmatterSchema?.find(f => f.name.trim().toLowerCase() === fieldName);
+    return field?.optionShorthands;
+  };
+
   // Schema options first (stable even with zero matching tickets), plus any stray
   // values actually present on tickets but missing from the schema, so nothing
   // becomes an unreachable filter target.
-  const getFieldOptions = (fieldName: 'status' | 'type'): string[] => {
+  const getFieldOptions = (fieldName: 'status' | 'type' | 'assignee'): string[] => {
     const repoNode = props.tree().find(r => r.repoPath === props.activeRepoPath());
     const field = repoNode?.config?.frontmatterSchema?.find(f => f.name.trim().toLowerCase() === fieldName);
     const schemaOptions = field?.options || [];
@@ -430,17 +445,21 @@ export default function Sidebar(props: SidebarProps) {
     return [...schemaOptions, ...strayValues];
   };
 
+  const UNASSIGNED = 'Unassigned';
+
   // Drop any excluded value that no longer exists for the active project/repo (e.g.
   // after switching to one with a different schema), so a stale exclusion doesn't
-  // silently keep hiding nothing - or, once reused, hide the wrong thing.
+  // silently keep hiding nothing - or, once reused, hide the wrong thing. The
+  // "Unassigned" pseudo-value is never a real schema/ticket option, so it's always
+  // treated as valid rather than pruned as stray.
   const pruneExcluded = (
     excluded: Accessor<Set<string>>,
     setExcluded: (s: Set<string>) => void,
     key: string,
-    fieldName: 'status' | 'type'
+    fieldName: 'status' | 'type' | 'assignee'
   ) => {
     const options = new Set(getFieldOptions(fieldName));
-    const pruned = new Set([...excluded()].filter(v => options.has(v)));
+    const pruned = new Set([...excluded()].filter(v => v === UNASSIGNED || options.has(v)));
     if (pruned.size !== excluded().size) {
       setExcluded(pruned);
       localStorage.setItem(key, JSON.stringify([...pruned]));
@@ -455,6 +474,7 @@ export default function Sidebar(props: SidebarProps) {
     if (!props.projectData()) return;
     pruneExcluded(statusExcluded, setStatusExcluded, 'overseer:filter:status:excluded', 'status');
     pruneExcluded(typeExcluded, setTypeExcluded, 'overseer:filter:type:excluded', 'type');
+    pruneExcluded(assigneeExcluded, setAssigneeExcluded, 'overseer:filter:assignee:excluded', 'assignee');
   });
 
   const filteredAndSortedTickets = (): TicketSummary[] => {
@@ -473,6 +493,7 @@ export default function Sidebar(props: SidebarProps) {
     }
     if (statusExcluded().size > 0) filtered = filtered.filter(t => !statusExcluded().has(t.status));
     if (typeExcluded().size > 0) filtered = filtered.filter(t => !t.type || !typeExcluded().has(t.type));
+    if (assigneeExcluded().size > 0) filtered = filtered.filter(t => !assigneeExcluded().has(t.assignee || UNASSIGNED));
 
     const copy = [...filtered];
     switch (sortOption()) {
@@ -840,6 +861,17 @@ export default function Sidebar(props: SidebarProps) {
                   onChange={setTypeExcludedPersist}
                   getBadgeStyle={v => getTypeBadgeStyle(v, getFieldOptionColors('type'))}
                 />
+                <CheckboxFilterDropdown
+                  label="assignees"
+                  options={[UNASSIGNED, ...getFieldOptions('assignee')]}
+                  excluded={assigneeExcluded()}
+                  onChange={setAssigneeExcludedPersist}
+                  getBadgeStyle={v =>
+                    v === UNASSIGNED
+                      ? { bg: colors.inkTint, text: colors.inkSoft }
+                      : getAssigneeBadgeStyle(v, getFieldOptionColors('assignee'))
+                  }
+                />
               </div>
             </Show>
 
@@ -856,6 +888,11 @@ export default function Sidebar(props: SidebarProps) {
                   {(ticket: TicketSummary) => {
                     const statusStyle = getStatusBadgeStyle(ticket.status, getFieldOptionColors('status'));
                     const typeStyle = getTypeBadgeStyle(ticket.type, getFieldOptionColors('type'));
+                    const assigneeStyle = getAssigneeBadgeStyle(ticket.assignee, getFieldOptionColors('assignee'));
+                    const assigneeShorthand = () =>
+                      ticket.assignee
+                        ? getFieldOptionShorthands('assignee')?.[ticket.assignee] || deriveShorthand(ticket.assignee)
+                        : '';
 
                     return (
                       <ListRow
@@ -918,6 +955,25 @@ export default function Sidebar(props: SidebarProps) {
                                 }}
                               >
                                 {ticket.status}
+                              </span>
+                            </Show>
+                            <Show when={ticket.assignee}>
+                              <span
+                                title={ticket.assignee}
+                                style={{
+                                  display: 'inline-flex',
+                                  'align-items': 'center',
+                                  'justify-content': 'center',
+                                  width: '16px',
+                                  height: '16px',
+                                  'font-size': '0.6rem',
+                                  background: assigneeStyle.bg,
+                                  color: assigneeStyle.text,
+                                  'border-radius': '50%',
+                                  'font-weight': 700
+                                }}
+                              >
+                                {assigneeShorthand()}
                               </span>
                             </Show>
                             <DeleteButton title={`Delete #${ticket.id}`} onClick={() => props.onDeleteTicket(ticket)} />

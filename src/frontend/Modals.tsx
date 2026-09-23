@@ -1,7 +1,7 @@
 import { createEffect, createSignal, For, Index, on, onCleanup, Show } from 'solid-js';
 import type { Accessor, JSX, Setter } from 'solid-js';
 import Icon from './Icon';
-import { colors, deriveBadgeStyle, font, isBuiltInEnumField } from './theme';
+import { colors, deriveBadgeStyle, deriveShorthand, font, isBuiltInEnumField } from './theme';
 import type { SchemaField } from './types';
 
 // Shared by all three modals below: closes on Escape while open. Each modal passes its
@@ -508,22 +508,33 @@ export function CreateItemModal(props: CreateItemModalProps) {
 interface EnumColorEditorProps {
   label: string;
   noun: string;
-  shape: 'pill' | 'square';
+  shape: 'pill' | 'square' | 'circle';
   optionsRaw: string;
   optionColors: Record<string, string> | undefined;
-  onChange: (optionsRaw: string, optionColors: Record<string, string>) => void;
+  optionShorthands?: Record<string, string> | undefined;
+  onChange: (optionsRaw: string, optionColors: Record<string, string>, optionShorthands?: Record<string, string>) => void;
 }
+
+const SHORTHAND_RE = /^[A-Z0-9]{1,2}$/;
 
 // A list of name + color-swatch rows, editable and addable, instead of the generic
 // enum fields' single comma-separated text input - status and type are the two fields
 // always rendered as colored badges in the sidebar, so seeing the name and color
 // together as one row (and an explicit "Add" affordance) is what makes it discoverable.
+// Assignee (shape: 'circle') additionally gets a shorthand column, since its badge is a
+// compact initials circle rather than a name-bearing pill/square.
 function EnumColorEditor(props: EnumColorEditorProps) {
-  const radius = () => (props.shape === 'pill' ? '999px' : '3px');
-  const rows = () => (props.optionsRaw.length === 0 ? [] : props.optionsRaw.split(',').map(s => s.trim()));
+  const radius = () => (props.shape === 'pill' ? '999px' : props.shape === 'circle' ? '50%' : '3px');
+  // Splitting unconditionally (rather than special-casing '' to []) matters for a
+  // field that starts with zero options (e.g. a fresh `assignee` list): appending one
+  // blank row and joining it back with ', ' produces '' again, which the old
+  // zero-length special case would then decode back to zero rows - silently
+  // swallowing the row "Add" just created. Splitting '' plainly yields [''], which
+  // correctly round-trips as "one blank row" instead.
+  const rows = () => props.optionsRaw.split(',').map(s => s.trim());
 
-  const commit = (newRows: string[], newColors: Record<string, string>) => {
-    props.onChange(newRows.join(', '), newColors);
+  const commit = (newRows: string[], newColors: Record<string, string>, newShorthands?: Record<string, string>) => {
+    props.onChange(newRows.join(', '), newColors, newShorthands);
   };
 
   const renameRow = (i: number, newName: string) => {
@@ -536,7 +547,21 @@ function EnumColorEditor(props: EnumColorEditorProps) {
       newColors[newName] = newColors[oldName];
       delete newColors[oldName];
     }
-    commit(newRows, newColors);
+    if (props.shape !== 'circle') {
+      commit(newRows, newColors);
+      return;
+    }
+    const newShorthands = { ...(props.optionShorthands || {}) };
+    if (oldName && oldName in newShorthands) {
+      const existing = newShorthands[oldName];
+      delete newShorthands[oldName];
+      if (newName) newShorthands[newName] = existing;
+    } else if (newName) {
+      // First time this row has ever had a name - seed a default shorthand. Once one
+      // exists it's only ever carried over above, never re-derived over an edit.
+      newShorthands[newName] = deriveShorthand(newName);
+    }
+    commit(newRows, newColors, newShorthands);
   };
 
   const removeRow = (i: number) => {
@@ -544,18 +569,34 @@ function EnumColorEditor(props: EnumColorEditorProps) {
     const oldName = current[i];
     const newColors = { ...(props.optionColors || {}) };
     if (oldName) delete newColors[oldName];
+    const newShorthands = { ...(props.optionShorthands || {}) };
+    if (oldName) delete newShorthands[oldName];
     commit(
       current.filter((_, idx) => idx !== i),
-      newColors
+      newColors,
+      newShorthands
     );
   };
 
-  const addRow = () => commit([...rows(), ''], props.optionColors || {});
+  const addRow = () => commit([...rows(), ''], props.optionColors || {}, props.optionShorthands || {});
 
   const setColor = (i: number, hex: string) => {
     const name = rows()[i];
     if (!name) return;
-    commit(rows(), { ...(props.optionColors || {}), [name]: hex });
+    commit(rows(), { ...(props.optionColors || {}), [name]: hex }, props.optionShorthands);
+  };
+
+  const setShorthand = (i: number, value: string) => {
+    const name = rows()[i];
+    if (!name) return;
+    commit(rows(), props.optionColors || {}, { ...(props.optionShorthands || {}), [name]: value.toUpperCase() });
+  };
+
+  const isShorthandValid = (name: string) => {
+    const value = props.optionShorthands?.[name] || '';
+    if (!SHORTHAND_RE.test(value)) return false;
+    const others = rows().filter(r => r !== name);
+    return !others.some(r => (props.optionShorthands?.[r] || '').toUpperCase() === value.toUpperCase());
   };
 
   return (
@@ -596,7 +637,28 @@ function EnumColorEditor(props: EnumColorEditorProps) {
                 onInput={e => setColor(i, e.currentTarget.value)}
                 style={{ ...fieldInputStyle, width: '84px', 'font-family': font.mono, 'font-size': '0.76rem' }}
               />
-              <Show when={/^#[0-9A-Fa-f]{6}$/.test(props.optionColors?.[row()] || '')}>
+              <Show when={props.shape === 'circle'}>
+                <input
+                  type="text"
+                  placeholder="AB"
+                  value={props.optionShorthands?.[row()] || ''}
+                  onInput={e => setShorthand(i, e.currentTarget.value)}
+                  maxLength={2}
+                  style={{
+                    ...fieldInputStyle,
+                    width: '40px',
+                    'text-align': 'center',
+                    'font-family': font.mono,
+                    'font-size': '0.76rem'
+                  }}
+                />
+              </Show>
+              <Show
+                when={
+                  /^#[0-9A-Fa-f]{6}$/.test(props.optionColors?.[row()] || '') &&
+                  (props.shape !== 'circle' || isShorthandValid(row()))
+                }
+              >
                 {(() => {
                   const preview = () => deriveBadgeStyle(props.optionColors![row()]);
                   return (
@@ -604,14 +666,19 @@ function EnumColorEditor(props: EnumColorEditorProps) {
                       style={{
                         'font-size': '0.7rem',
                         'font-weight': 600,
-                        padding: '2px 9px',
+                        padding: props.shape === 'circle' ? '0' : '2px 9px',
+                        width: props.shape === 'circle' ? '22px' : undefined,
+                        height: props.shape === 'circle' ? '22px' : undefined,
+                        display: props.shape === 'circle' ? 'inline-flex' : undefined,
+                        'align-items': props.shape === 'circle' ? 'center' : undefined,
+                        'justify-content': props.shape === 'circle' ? 'center' : undefined,
                         'border-radius': radius(),
                         background: preview().bg,
                         color: preview().text,
                         'white-space': 'nowrap'
                       }}
                     >
-                      {row() || 'preview'}
+                      {props.shape === 'circle' ? props.optionShorthands?.[row()] || '' : row() || 'preview'}
                     </span>
                   );
                 })()}
@@ -697,6 +764,24 @@ export function RepoConfigModal(props: RepoConfigModalProps) {
   };
   useEscapeToClose(props.isOpen, confirmClose);
 
+  // Enum fields' option editors can get long (many statuses/types/assignees), so each
+  // field row starts collapsed to just its name/type and is expanded manually - keyed
+  // by index like the rest of this component's row state, so it resets to all-collapsed
+  // each time the modal opens rather than persisting stale expansion across repos.
+  const [expandedFields, setExpandedFields] = createSignal<Set<number>>(new Set());
+  createEffect(
+    on(props.isOpen, open => {
+      if (open) setExpandedFields(new Set<number>());
+    })
+  );
+  const toggleExpanded = (index: number) =>
+    setExpandedFields(prev => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+
   return (
     <Show when={props.isOpen()}>
       <ModalOverlay width="580px" maxHeight="85vh" onClose={confirmClose}>
@@ -738,7 +823,11 @@ export function RepoConfigModal(props: RepoConfigModalProps) {
             </h4>
             <button
               type="button"
-              onClick={() => props.setConfigSchema(prev => [...prev, { name: '', type: 'string', optionsRaw: '' }])}
+              onClick={() => {
+                const newIndex = props.configSchema().length;
+                props.setConfigSchema(prev => [...prev, { name: '', type: 'string', optionsRaw: '' }]);
+                setExpandedFields(prev => new Set<number>([...prev, newIndex]));
+              }}
               style={{
                 display: 'flex',
                 'align-items': 'center',
@@ -764,6 +853,8 @@ export function RepoConfigModal(props: RepoConfigModalProps) {
           <Index each={props.configSchema()}>
             {(field, index) => {
               const isLocked = () => isBuiltInEnumField(field().name);
+              const isExpanded = () => expandedFields().has(index);
+              const optionCount = () => (field().optionsRaw || '').split(',').map(s => s.trim()).filter(Boolean).length;
               return (
               <div
                 style={{
@@ -775,6 +866,25 @@ export function RepoConfigModal(props: RepoConfigModalProps) {
                 }}
               >
                 <div style={{ display: 'flex', gap: '8px', 'margin-bottom': '6px' }}>
+                  <Show when={field().type === 'enum'}>
+                    <button
+                      type="button"
+                      onClick={() => toggleExpanded(index)}
+                      title={isExpanded() ? 'Collapse' : 'Expand'}
+                      style={{
+                        display: 'flex',
+                        'align-items': 'center',
+                        background: 'transparent',
+                        border: 'none',
+                        color: colors.inkFaint,
+                        padding: '0 2px',
+                        cursor: 'pointer',
+                        'flex-shrink': 0
+                      }}
+                    >
+                      <Icon name={isExpanded() ? 'chevronDown' : 'chevronRight'} size={14} />
+                    </button>
+                  </Show>
                   <input
                     type="text"
                     placeholder="Field name (e.g. status)"
@@ -853,44 +963,84 @@ export function RepoConfigModal(props: RepoConfigModalProps) {
                   </Show>
                 </div>
 
-                {/* status and type are built-in fields (always present, unlike arbitrary
-                    custom fields) and the only two rendered as colored badges in the
-                    sidebar, so they get a dedicated list-with-colors editor instead of
-                    the plain comma-separated text every other enum field uses. Status
-                    renders as a rounded pill, type as a square, so the editor mirrors
-                    that shape for an accurate preview. */}
-                <Show
-                  when={field().type === 'enum' && isLocked()}
-                  fallback={
-                    <Show when={field().type === 'enum'}>
-                      <input
-                        type="text"
-                        placeholder="Options (comma-separated, e.g. backlog, active, done)"
-                        value={field().optionsRaw || ''}
-                        onInput={e =>
-                          props.setConfigSchema(prev =>
-                            prev.map((item, idx) =>
-                              idx === index ? { ...item, optionsRaw: e.currentTarget.value } : item
-                            )
-                          )
-                        }
-                        style={{ ...inputStyle, padding: '7px 10px' }}
-                      />
-                    </Show>
-                  }
-                >
-                  <EnumColorEditor
-                    label={field().name.trim().toLowerCase() === 'status' ? 'Status values' : 'Type values'}
-                    noun={field().name.trim().toLowerCase() === 'status' ? 'status' : 'type'}
-                    shape={field().name.trim().toLowerCase() === 'status' ? 'pill' : 'square'}
-                    optionsRaw={field().optionsRaw || ''}
-                    optionColors={field().optionColors}
-                    onChange={(optionsRaw, optionColors) =>
-                      props.setConfigSchema(prev =>
-                        prev.map((item, idx) => (idx === index ? { ...item, optionsRaw, optionColors } : item))
-                      )
+                {/* status/type/assignee are built-in fields (always present, unlike
+                    arbitrary custom fields) and the only ones rendered as colored badges
+                    in the sidebar, so they get a dedicated list-with-colors editor
+                    instead of the plain comma-separated text every other enum field
+                    uses. Status renders as a rounded pill, type as a square, assignee as
+                    a shorthand-in-circle, so the editor mirrors that shape for an
+                    accurate preview. Collapsed by default (see isExpanded) since this
+                    editor can get long with many options. */}
+                <Show when={field().type === 'enum'}>
+                  <Show
+                    when={isExpanded()}
+                    fallback={
+                      <button
+                        type="button"
+                        onClick={() => toggleExpanded(index)}
+                        style={{
+                          display: 'block',
+                          width: '100%',
+                          'text-align': 'left',
+                          background: 'transparent',
+                          border: 'none',
+                          padding: '2px 0 0',
+                          margin: 0,
+                          color: colors.inkFaint,
+                          'font-family': font.sans,
+                          'font-size': '0.76rem',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {optionCount()} option{optionCount() === 1 ? '' : 's'} - click to edit
+                      </button>
                     }
-                  />
+                  >
+                    <Show
+                      when={isLocked()}
+                      fallback={
+                        <input
+                          type="text"
+                          placeholder="Options (comma-separated, e.g. backlog, active, done)"
+                          value={field().optionsRaw || ''}
+                          onInput={e =>
+                            props.setConfigSchema(prev =>
+                              prev.map((item, idx) =>
+                                idx === index ? { ...item, optionsRaw: e.currentTarget.value } : item
+                              )
+                            )
+                          }
+                          style={{ ...inputStyle, padding: '7px 10px' }}
+                        />
+                      }
+                    >
+                      {(() => {
+                        const fieldName = () => field().name.trim().toLowerCase();
+                        const label = () =>
+                          fieldName() === 'status' ? 'Status values' : fieldName() === 'type' ? 'Type values' : 'Assignee values';
+                        const noun = () => (fieldName() === 'status' ? 'status' : fieldName() === 'type' ? 'type' : 'assignee');
+                        const shape = () =>
+                          fieldName() === 'status' ? 'pill' : fieldName() === 'type' ? 'square' : 'circle';
+                        return (
+                          <EnumColorEditor
+                            label={label()}
+                            noun={noun()}
+                            shape={shape()}
+                            optionsRaw={field().optionsRaw || ''}
+                            optionColors={field().optionColors}
+                            optionShorthands={field().optionShorthands}
+                            onChange={(optionsRaw, optionColors, optionShorthands) =>
+                              props.setConfigSchema(prev =>
+                                prev.map((item, idx) =>
+                                  idx === index ? { ...item, optionsRaw, optionColors, optionShorthands } : item
+                                )
+                              )
+                            }
+                          />
+                        );
+                      })()}
+                    </Show>
+                  </Show>
                 </Show>
               </div>
               );

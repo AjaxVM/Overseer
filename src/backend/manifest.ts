@@ -6,6 +6,7 @@ export interface TicketSummary {
   name: string;
   status: string;
   type?: string;
+  assignee?: string;
   fileName: string;
   filePath: string; // derived at read time from (dir, fileName) - never persisted
 }
@@ -33,6 +34,7 @@ interface PersistedTicketSummary {
   name: string;
   status: string;
   type?: string;
+  assignee?: string;
   fileName: string;
 }
 
@@ -57,6 +59,13 @@ interface PersistedProjectManifest {
 // ticket files is cheap at this tool's scale.
 const ticketCache = new Map<string, { mtime: number; summary: TicketSummary }>();
 const subManifestCache = new Map<string, { mtime: number; name: string }>();
+
+// Trued-up manifests computed by the passive file watcher that differ from what's on
+// disk, keyed by project dir - held in memory instead of written straight to disk so a
+// bulk filesystem change the watcher merely observes (e.g. a git checkout/merge) never
+// dirties the working tree on its own. Cleared once committed via commitPendingManifest,
+// or once a later true-up finds the on-disk state matches again.
+const pendingManifestCache = new Map<string, ProjectManifest>();
 
 function toPersistedManifest(manifest: ProjectManifest): PersistedProjectManifest {
   return {
@@ -166,6 +175,7 @@ export function readRawProjectManifest(dir: string): ProjectManifest | null {
       name: t.name,
       status: t.status,
       type: t.type,
+      assignee: t.assignee,
       fileName: t.fileName,
       filePath: path.join(dir, t.fileName)
     }));
@@ -248,7 +258,27 @@ export function buildShallowManifest(projectDir: string): ProjectManifest {
   };
 }
 
-export function loadOrTrueUpProject(projectDir: string, _repoConfig?: any): ProjectManifest {
+export function getPendingManifest(projectDir: string): ProjectManifest | null {
+  return pendingManifestCache.get(projectDir) || null;
+}
+
+// Persists a pending manifest computed by a passive true-up (see loadOrTrueUpProject's
+// `persist: false` path) once the user explicitly asks to sync it in. Returns whether
+// there was anything pending to write.
+export function commitPendingManifest(projectDir: string): boolean {
+  const pending = pendingManifestCache.get(projectDir);
+  if (!pending) return false;
+  saveProjectManifest(projectDir, pending);
+  pendingManifestCache.delete(projectDir);
+  return true;
+}
+
+export function loadOrTrueUpProject(
+  projectDir: string,
+  _repoConfig?: any,
+  opts?: { persist?: boolean }
+): ProjectManifest {
+  const persist = opts?.persist !== false;
   if (!fs.existsSync(projectDir)) {
     return {
       name: path.basename(projectDir),
@@ -344,6 +374,7 @@ export function loadOrTrueUpProject(projectDir: string, _repoConfig?: any): Proj
           name: String(defaultName),
           status: attributes.status || 'idea',
           type: attributes.type,
+          assignee: attributes.assignee,
           fileName: fileEntry.name,
           filePath
         };
@@ -392,16 +423,26 @@ export function loadOrTrueUpProject(projectDir: string, _repoConfig?: any): Proj
   // restart, since the old flag conflated "not in memory cache" with "actually changed".
   const primaryManifestPath = path.join(projectDir, '_project.json');
   const serialized = serializeManifest(finalManifest);
-  let shouldWrite = true;
+  let hasChanged = true;
   if (fs.existsSync(primaryManifestPath)) {
     try {
-      shouldWrite = fs.readFileSync(primaryManifestPath, 'utf-8') !== serialized;
+      hasChanged = fs.readFileSync(primaryManifestPath, 'utf-8') !== serialized;
     } catch (e) {
-      shouldWrite = true;
+      hasChanged = true;
     }
   }
-  if (shouldWrite) {
+
+  if (!hasChanged) {
+    pendingManifestCache.delete(projectDir);
+  } else if (persist) {
     fs.writeFileSync(primaryManifestPath, serialized, 'utf-8');
+    pendingManifestCache.delete(projectDir);
+  } else {
+    // Passive true-up (file watcher): hold the reconciled result in memory instead of
+    // writing it, so a bulk change the watcher merely observed (e.g. a git checkout)
+    // never auto-dirties the working tree. The caller surfaces this via
+    // getPendingManifest so the UI can offer an explicit "sync now".
+    pendingManifestCache.set(projectDir, finalManifest);
   }
 
   return finalManifest;
@@ -416,6 +457,12 @@ export function syncTicketToManifest(
   const manifest = readRawProjectManifest(projectDir);
   if (!manifest) return;
 
+  // `attributes` is always the ticket's complete current attribute set, so a field the
+  // user just cleared to blank arrives as ''. Falling back to the old value with `||`
+  // would make clearing a field impossible to persist - a presence check distinguishes
+  // "field is set to blank" from "field is absent from this save" instead.
+  const hasOwn = (key: string) => Object.prototype.hasOwnProperty.call(attributes, key);
+
   let found = false;
   manifest.projectmap.tickets = (manifest.projectmap.tickets || []).map(ticket => {
     if (ticket.fileName === fileName || ticket.filePath === ticketFilePath) {
@@ -424,8 +471,9 @@ export function syncTicketToManifest(
         ...ticket,
         id: attributes.id || ticket.id,
         name: attributes.name || ticket.name,
-        status: attributes.status || ticket.status,
-        type: attributes.type || ticket.type
+        status: hasOwn('status') ? attributes.status || '' : ticket.status,
+        type: hasOwn('type') ? attributes.type || undefined : ticket.type,
+        assignee: hasOwn('assignee') ? attributes.assignee || undefined : ticket.assignee
       };
     }
     return ticket;
@@ -436,7 +484,8 @@ export function syncTicketToManifest(
       id: attributes.id || fileName.replace(/\.md$/i, ''),
       name: attributes.name || fileName,
       status: attributes.status || 'idea',
-      type: attributes.type,
+      type: attributes.type || undefined,
+      assignee: attributes.assignee || undefined,
       fileName,
       filePath: ticketFilePath
     });

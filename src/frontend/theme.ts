@@ -204,10 +204,31 @@ export function getTypeBadgeStyle(type?: string, optionColors?: Record<string, s
   }
 }
 
+// `optionColors` comes from a repo's overseer.json (Repository Settings -> assignee
+// colors) and maps each configured assignee's full name to a user-picked hex color.
+// Unlike status/type there's no sensible per-name default to switch on - an unset or
+// unconfigured assignee just gets a neutral fill.
+export function getAssigneeBadgeStyle(assignee?: string, optionColors?: Record<string, string>): BadgeStyle {
+  const configured = assignee ? optionColors?.[assignee] : undefined;
+  if (configured) return deriveBadgeStyle(configured);
+  return deriveBadgeStyle(colors.inkSoft);
+}
+
+// Best-effort 1-2 char initials for the assignee circle badge, used both to seed a
+// default shorthand when a name is first entered in Settings and as a rendering
+// fallback for any assignee value that predates a configured shorthand (e.g. one
+// hand-typed into a ticket's frontmatter before being added to Settings).
+export function deriveShorthand(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return '';
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return (words[0][0] + words[1][0]).toUpperCase();
+}
+
 // Fields with dedicated Repository Settings UI (locked name/type, list-with-colors
 // editor instead of the generic comma-separated input) - the only fields rendered as
 // colored badges in the sidebar, so the only ones a color picker is relevant for.
-export const BUILT_IN_ENUM_FIELDS = ['status', 'type'] as const;
+export const BUILT_IN_ENUM_FIELDS = ['status', 'type', 'assignee'] as const;
 export type BuiltInEnumField = (typeof BUILT_IN_ENUM_FIELDS)[number];
 
 export function isBuiltInEnumField(name: string): name is BuiltInEnumField {
