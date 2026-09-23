@@ -83,6 +83,27 @@ function serializeManifest(manifest: ProjectManifest): string {
   return JSON.stringify(toPersistedManifest(manifest), null, 2) + '\n';
 }
 
+// Ignores pure line-ending differences (CRLF vs LF) so a file checked out with
+// core.autocrlf-converted CRLF doesn't register as "changed" just because we generate
+// LF-only content in memory.
+function contentEquals(a: string, b: string): boolean {
+  return a.replace(/\r\n/g, '\n') === b.replace(/\r\n/g, '\n');
+}
+
+// A plain fs.writeFileSync always emits exactly the LF-only string we hand it, silently
+// flipping every line of a CRLF-checked-out file (see core.autocrlf) - that makes an
+// otherwise-unchanged file look modified to git, and turns one real content change into
+// a whole-file diff. Preserving whichever eol style the file already had avoids both.
+export function writePreservingEol(filePath: string, content: string): void {
+  let eol = '\n';
+  if (fs.existsSync(filePath)) {
+    const existing = fs.readFileSync(filePath, 'utf-8');
+    if (existing.includes('\r\n')) eol = '\r\n';
+  }
+  const normalized = content.replace(/\r\n/g, '\n');
+  fs.writeFileSync(filePath, eol === '\r\n' ? normalized.replace(/\n/g, '\r\n') : normalized, 'utf-8');
+}
+
 // Applies an explicit key order to a list, keyed by keyFn(item). Keys not present in
 // `items` are ignored; items not mentioned in `order` keep their relative position at
 // the end. Used both to persist a drag-and-drop reorder and, during true-up, to keep a
@@ -204,7 +225,7 @@ export function readRawProjectManifest(dir: string): ProjectManifest | null {
 export function saveProjectManifest(dir: string, manifest: ProjectManifest): void {
   // Always write to _project.json to adhere to POC 15 proposal
   const targetPath = path.join(dir, '_project.json');
-  fs.writeFileSync(targetPath, serializeManifest(manifest), 'utf-8');
+  writePreservingEol(targetPath, serializeManifest(manifest));
 }
 
 // Cheap, read-only stand-in for loadOrTrueUpProject, used only on a project's first-ever
@@ -426,7 +447,7 @@ export function loadOrTrueUpProject(
   let hasChanged = true;
   if (fs.existsSync(primaryManifestPath)) {
     try {
-      hasChanged = fs.readFileSync(primaryManifestPath, 'utf-8') !== serialized;
+      hasChanged = !contentEquals(fs.readFileSync(primaryManifestPath, 'utf-8'), serialized);
     } catch (e) {
       hasChanged = true;
     }
@@ -435,7 +456,7 @@ export function loadOrTrueUpProject(
   if (!hasChanged) {
     pendingManifestCache.delete(projectDir);
   } else if (persist) {
-    fs.writeFileSync(primaryManifestPath, serialized, 'utf-8');
+    saveProjectManifest(projectDir, finalManifest);
     pendingManifestCache.delete(projectDir);
   } else {
     // Passive true-up (file watcher): hold the reconciled result in memory instead of

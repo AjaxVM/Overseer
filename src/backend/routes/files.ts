@@ -1,5 +1,5 @@
 import fs from 'fs';
-import { parseFrontmatter, stringifyFrontmatter, syncTicketToManifest } from '../manifest';
+import { parseFrontmatter, stringifyFrontmatter, syncTicketToManifest, writePreservingEol } from '../manifest';
 
 export function handleGetFileRead(req: any, res: any) {
   const urlObj = new URL(req.url, 'http://localhost');
@@ -24,7 +24,7 @@ export function handlePostFileSave(req: any, res: any) {
       const { path: filePath, attributes, body } = JSON.parse(reqBody);
       if (!filePath) throw new Error('File path required');
       const fileContent = stringifyFrontmatter(attributes, body);
-      fs.writeFileSync(filePath, fileContent, 'utf-8');
+      writePreservingEol(filePath, fileContent);
 
       // Sync ticket to project manifest!
       if (filePath.toLowerCase().endsWith('.md')) {
