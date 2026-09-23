@@ -309,7 +309,11 @@ export default function Sidebar(props: SidebarProps) {
   const [isSubprojectsOpen, setIsSubprojectsOpen] = createSignal(localStorage.getItem('overseer:panel:subprojects') !== 'false');
   const [isTicketsOpen, setIsTicketsOpen] = createSignal(localStorage.getItem('overseer:panel:tickets') !== 'false');
   const [isDocsOpen, setIsDocsOpen] = createSignal(localStorage.getItem('overseer:panel:docs') !== 'false');
-  const [ticketSearch, setTicketSearch] = createSignal('');
+  const [ticketSearch, setTicketSearch] = createSignal(localStorage.getItem('overseer:ticketSearch') || '');
+  const setTicketSearchPersist = (value: string) => {
+    setTicketSearch(value);
+    localStorage.setItem('overseer:ticketSearch', value);
+  };
   const [sortOption, setSortOption] = createSignal<'manifest' | 'status' | 'name' | 'id'>(
     (localStorage.getItem('overseer:sortOption') as any) || 'manifest'
   );
@@ -444,6 +448,11 @@ export default function Sidebar(props: SidebarProps) {
   };
 
   createEffect(() => {
+    // Before the tree/project data has loaded, getFieldOptions() has nothing to check
+    // against and returns [] for every field - pruning against that would treat every
+    // persisted exclusion as stray and wipe it (both the signal and localStorage)
+    // before the real options ever arrive. Wait for an actual project to be loaded.
+    if (!props.projectData()) return;
     pruneExcluded(statusExcluded, setStatusExcluded, 'overseer:filter:status:excluded', 'status');
     pruneExcluded(typeExcluded, setTypeExcluded, 'overseer:filter:type:excluded', 'type');
   });
@@ -493,7 +502,7 @@ export default function Sidebar(props: SidebarProps) {
       }}
     >
       {/* HEADER: brand + repo switcher */}
-      <div style={{ padding: '16px 16px 14px', 'flex-shrink': 0 }}>
+      <div style={{ padding: '16px 10px 14px', 'flex-shrink': 0 }}>
         <div style={{ display: 'flex', 'justify-content': 'space-between', 'align-items': 'center', 'margin-bottom': '14px' }}>
           <div style={{ display: 'flex', 'align-items': 'center', gap: '9px' }}>
             <div
@@ -627,7 +636,7 @@ export default function Sidebar(props: SidebarProps) {
       </div>
 
       {/* PROJECT HEADER */}
-      <div style={{ padding: '0 16px 12px', 'flex-shrink': 0 }}>
+      <div style={{ padding: '0 10px 12px', 'flex-shrink': 0 }}>
         <Show when={props.projectData()?.parentPath}>
           <div
             onClick={() => props.onNavigateProject(props.projectData()!.parentPath!)}
@@ -666,7 +675,8 @@ export default function Sidebar(props: SidebarProps) {
               'text-overflow': 'ellipsis',
               'white-space': 'nowrap',
               flex: 1,
-              cursor: 'pointer'
+              cursor: 'pointer',
+              'margin-left': '6px'
             }}
           >
             {props.projectData()?.manifest.name || 'Select a project'}
@@ -700,7 +710,7 @@ export default function Sidebar(props: SidebarProps) {
       </div>
 
       {/* SECTIONS */}
-      <div style={{ flex: 1, 'min-height': 0, 'overflow-y': 'auto', padding: '2px 14px 16px', display: 'flex', 'flex-direction': 'column' }}>
+      <div style={{ flex: 1, 'min-height': 0, 'overflow-y': 'auto', padding: '2px 10px 16px', display: 'flex', 'flex-direction': 'column' }}>
         {/* Sub-Projects */}
         <Show when={(props.projectData()?.manifest.projectmap.subprojects || []).length > 0}>
           <SectionHeader
@@ -778,7 +788,7 @@ export default function Sidebar(props: SidebarProps) {
                     type="text"
                     placeholder="Filter tickets"
                     value={ticketSearch()}
-                    onInput={e => setTicketSearch(e.currentTarget.value)}
+                    onInput={e => setTicketSearchPersist(e.currentTarget.value)}
                     style={{
                       flex: 1,
                       'min-width': 0,

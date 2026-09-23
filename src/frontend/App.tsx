@@ -83,6 +83,46 @@ export default function App() {
     return window.confirm('You have unsaved changes. Discard them and continue?');
   };
 
+  // Path helpers for the URL (poc-12) - the frontend has no Node `path` module, so these
+  // are plain string ops in the same style as the dirnameOf helper further down.
+  const pathSep = (p: string) => (p.includes('\\') ? '\\' : '/');
+  const toRelativePath = (root: string, abs: string) =>
+    abs.startsWith(root) ? abs.slice(root.length).replace(/^[\\/]/, '') : abs;
+  const toAbsolutePath = (root: string, rel: string) =>
+    !rel ? root : `${root}${root.endsWith(pathSep(root)) ? '' : pathSep(root)}${rel}`;
+
+  // Keeps the URL a shareable/refreshable pointer to what's currently open (poc-12) -
+  // called after every navigation action, alongside the existing localStorage writes
+  // (which remain the fallback for a bare visit with no URL params at all). Only one
+  // path is encoded - whichever is most specific right now (the open file, else the
+  // active project folder) - relative to the repo root, since the app is always
+  // "viewing a file" one way or another and repeating the repo-root prefix three times
+  // added nothing. The repo itself is identified by its short name rather than its
+  // absolute root - that root is already known from the registered repo list (the
+  // global config), so the absolute path doesn't need to leak into the URL at all.
+  const buildNavUrl = () => {
+    const repoPath = activeRepoPath();
+    const repoName = repoPath ? tree().find(r => r.repoPath === repoPath)?.name : undefined;
+    const target = activeFilePath() || activeProjectPath();
+    const params = new URLSearchParams();
+    if (repoPath && repoName) {
+      params.set('repo', repoName);
+      if (target) params.set('path', toRelativePath(repoPath, target));
+    }
+    const qs = params.toString();
+    return qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
+  };
+
+  const pushNavUrl = () => {
+    const url = buildNavUrl();
+    if (url !== window.location.pathname + window.location.search) {
+      window.history.pushState(null, '', url);
+    }
+  };
+
+  const isProjectOverviewFile = (filePath: string, projectPath: string) =>
+    filePath.endsWith('_project.md') && dirnameOf(filePath) === projectPath;
+
   const handleOpenProjectDescription = (overrideData?: ProjectDetailsResponse) => {
     const pData = overrideData || projectData();
     const pPath = overrideData?.path || activeProjectPath();
@@ -92,13 +132,14 @@ export default function App() {
     const description = pData.description || `# ${pData.manifest.name}\n\nProject overview and goals...`;
     setActiveFilePath(descFilePath);
     setActiveTicketId('PROJECT');
-    setActiveTicketName(`${pData.manifest.name} Overview`);
+    setActiveTicketName(pData.manifest.name);
     setAttributes([]);
     setOriginalAttributes([]);
     setMarkdownBody(description);
     setOriginalMarkdownBody(description);
     setActiveTab('preview');
     setSaveStatus('');
+    pushNavUrl();
   };
 
   const loadProject = async (projectPath: string, repoPath?: string, autoOpenOverview = false) => {
@@ -119,9 +160,81 @@ export default function App() {
 
       if (autoOpenOverview) {
         handleOpenProjectDescription(data);
+      } else {
+        pushNavUrl();
       }
     } catch (err: any) {
       console.error('Failed to load project:', err);
+    }
+  };
+
+  // Shared by the initial load (fetchTree) and browser back/forward (handlePopState) -
+  // the URL (poc-12) wins over localStorage when both are present, which is what makes a
+  // link to a specific ticket/project/doc shareable and refresh-proof. localStorage
+  // remains the fallback for a bare visit with no URL params at all.
+  const applyLocationState = async (data: RepoTreeNode[]) => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlRepoName = urlParams.get('repo');
+    const urlPath = urlParams.get('path');
+
+    // Only consult localStorage when the URL didn't name a repo itself - an explicit
+    // URL should never be muddied by a stale localStorage project from a different
+    // repo/session.
+    const savedRepo = urlRepoName ? null : localStorage.getItem('overseer:activeRepo');
+    const savedProject = urlRepoName ? null : localStorage.getItem('overseer:activeProject');
+
+    // Prefer whichever repo actually contains the saved project path over the
+    // separately-saved repo path - the two can drift apart (e.g. repo list order
+    // changing between sessions), and trusting a stale repo match here was
+    // force-overwriting the correct repo back into localStorage on every load.
+    const targetRepo =
+      (urlRepoName && data.find(r => r.name === urlRepoName)) ||
+      (savedProject && data.find(r => savedProject.startsWith(r.repoPath))) ||
+      data.find(r => r.repoPath === savedRepo) ||
+      (data.length > 0 ? data[0] : null);
+    if (!targetRepo) return;
+
+    setActiveRepoPath(targetRepo.repoPath);
+    const projectsCat = targetRepo.children?.find(c => c.categoryType === 'projects');
+
+    // No specific file/folder named - fall back to the saved/default project, same as
+    // before, auto-opening its overview unless a file's already active in this session.
+    if (!urlPath) {
+      const targetProjectPath =
+        savedProject && savedProject.startsWith(targetRepo.repoPath) ? savedProject : projectsCat?.path;
+      if (targetProjectPath) {
+        loadProject(targetProjectPath, targetRepo.repoPath, !activeFilePath());
+      }
+      return;
+    }
+
+    const absTarget = toAbsolutePath(targetRepo.repoPath, urlPath);
+
+    if (absTarget.toLowerCase().endsWith('.md')) {
+      if (projectsCat && absTarget.startsWith(projectsCat.path)) {
+        // Ticket or the project's own _project.md - both live directly inside their
+        // project folder, so its dirname is the project to load.
+        const projectDir = dirnameOf(absTarget);
+        await loadProject(projectDir, targetRepo.repoPath, false);
+        if (isProjectOverviewFile(absTarget, projectDir)) {
+          handleOpenProjectDescription();
+        } else {
+          handleOpenFile(absTarget, targetRepo.repoPath);
+        }
+      } else {
+        // A doc - not inside a project folder, so there's nothing project-specific to
+        // restore for it. Land on the default project (same as the no-path case) so the
+        // Sidebar still shows something sensible, then open the doc on top - matching
+        // today's behavior where opening a doc doesn't change the active project either.
+        if (projectsCat?.path) {
+          await loadProject(projectsCat.path, targetRepo.repoPath, false);
+        }
+        handleOpenFile(absTarget, targetRepo.repoPath);
+      }
+    } else {
+      // A project (or sub-project) folder with no specific file open - same as clicking
+      // it in the sidebar.
+      loadProject(absTarget, targetRepo.repoPath, true);
     }
   };
 
@@ -130,32 +243,17 @@ export default function App() {
       const res = await fetch('/api/projects');
       const data: RepoTreeNode[] = await res.json();
       setTree(data);
-
-      const savedRepo = localStorage.getItem('overseer:activeRepo');
-      const savedProject = localStorage.getItem('overseer:activeProject');
-
-      // Prefer whichever repo actually contains the saved project path over the
-      // separately-saved repo path - the two can drift apart (e.g. repo list order
-      // changing between sessions), and trusting a stale repo match here was
-      // force-overwriting the correct repo back into localStorage on every load.
-      const targetRepo =
-        (savedProject && data.find(r => savedProject.startsWith(r.repoPath))) ||
-        data.find(r => r.repoPath === savedRepo) ||
-        (data.length > 0 ? data[0] : null);
-
-      if (targetRepo) {
-        setActiveRepoPath(targetRepo.repoPath);
-        const projectsCat = targetRepo.children?.find(c => c.categoryType === 'projects');
-        const targetProjectPath =
-          savedProject && savedProject.startsWith(targetRepo.repoPath) ? savedProject : projectsCat?.path;
-
-        if (targetProjectPath) {
-          loadProject(targetProjectPath, targetRepo.repoPath, !activeFilePath());
-        }
-      }
+      await applyLocationState(data);
     } catch (e) {
       console.error('Failed to fetch tree:', e);
     }
+  };
+
+  // Restores repo/project/file when the user navigates with the browser's back/forward
+  // buttons - the pushNavUrl calls scattered through the navigation handlers above are
+  // what put those entries on the history stack in the first place.
+  const handlePopState = () => {
+    applyLocationState(tree());
   };
 
   createEffect(() => {
@@ -175,6 +273,8 @@ export default function App() {
       e.returnValue = '';
     }
   });
+
+  window.addEventListener('popstate', handlePopState);
 
   // Selecting a repo always lands on its projects root, not a sub-project - tickets
   // can live directly at that root, so drilling into the first sub-project would hide them.
@@ -214,6 +314,7 @@ export default function App() {
       const [id, name] = findActiveTicketDetails(filePath, items, data.body || '');
       setActiveTicketId(id);
       setActiveTicketName(name);
+      pushNavUrl();
     } catch (err: any) {
       console.error('Failed to load file:', err);
     }
@@ -252,6 +353,16 @@ export default function App() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleQuickRenameTicket = (newName: string) => {
+    setActiveTicketName(newName);
+    setAttributes(prev => {
+      const idx = prev.findIndex(a => a.key.trim().toLowerCase() === 'name');
+      if (idx === -1) return [...prev, { key: 'name', val: newName }];
+      return prev.map((a, i) => (i === idx ? { ...a, val: newName } : a));
+    });
+    handleSaveFile();
   };
 
   const clearWorkspace = () => {
@@ -371,6 +482,33 @@ export default function App() {
       loadProject(pPath, activeRepoPath() || undefined);
     } catch (err: any) {
       console.error('Failed to reorder project:', err);
+    }
+  };
+
+  const handleRenameProject = async (newName: string) => {
+    const projectPath = activeProjectPath();
+    if (!projectPath) return;
+    setActiveTicketName(newName);
+    try {
+      const res = await fetch('/api/project/rename', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectPath, name: newName })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to rename project');
+      loadProject(projectPath, activeRepoPath() || undefined);
+      fetchTree();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleRenameActiveItem = (newName: string) => {
+    if (activeFilePath()?.endsWith('_project.md')) {
+      handleRenameProject(newName);
+    } else {
+      handleQuickRenameTicket(newName);
     }
   };
 
@@ -525,6 +663,7 @@ export default function App() {
         onSave={handleSaveFile}
         canDeleteActive={canDeleteActive}
         onDeleteActive={handleDeleteActiveItem}
+        onRenameActiveItem={handleRenameActiveItem}
       />
 
       <AddRepoModal

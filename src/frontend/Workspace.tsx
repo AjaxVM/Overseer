@@ -2,6 +2,7 @@ import { createEffect, createSignal, onCleanup, For, Index, Show } from 'solid-j
 import type { Accessor, Setter } from 'solid-js';
 import { marked } from 'marked';
 import Icon from './Icon';
+import InlineEditText from './InlineEditText';
 import { colors, font, getStatusBadgeStyle, getTypeBadgeStyle } from './theme';
 import type { BadgeStyle } from './theme';
 import type { FrontmatterItem, RepoTreeNode, SchemaField } from './types';
@@ -28,6 +29,7 @@ interface WorkspaceProps {
   onSave: () => void;
   canDeleteActive: Accessor<boolean>;
   onDeleteActive: () => void;
+  onRenameActiveItem: (newName: string) => void;
 }
 
 function TabButton(props: { active: boolean; icon: 'eye' | 'pencil'; label: string; onClick: () => void }) {
@@ -267,8 +269,11 @@ export default function Workspace(props: WorkspaceProps) {
                   #{props.activeTicketId()}
                 </span>
               </Show>
-              <h2
-                style={{
+              <InlineEditText
+                value={props.activeTicketName() || ''}
+                onCommit={props.onRenameActiveItem}
+                editTitle={props.activeFilePath()?.endsWith('_project.md') ? 'Rename project' : 'Rename ticket'}
+                textStyle={{
                   margin: 0,
                   'font-family': font.display,
                   'font-weight': 600,
@@ -278,9 +283,7 @@ export default function Workspace(props: WorkspaceProps) {
                   'text-overflow': 'ellipsis',
                   'white-space': 'nowrap'
                 }}
-              >
-                {props.activeTicketName()}
-              </h2>
+              />
             </div>
             <div
               style={{

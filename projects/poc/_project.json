@@ -1,5 +1,5 @@
 {
-  "name": "poc",
+  "name": "PoC",
   "descriptionFile": "_project.md",
   "projectmap": {
     "tickets": [
@@ -96,7 +96,7 @@
       {
         "id": "eugnn",
         "name": "Rename projects",
-        "status": "idea",
+        "status": "done",
         "type": "",
         "fileName": "eugnn-rename-projects.md"
       },
@@ -115,7 +115,7 @@
       {
         "id": "poc-12",
         "name": "currently viewed ticket/project should persist in url and restore",
-        "status": "idea",
+        "status": "done",
         "fileName": "12-currently-viewed-ticket-project-should-persist-in-url-and-restore.md"
       },
       {
@@ -205,14 +205,14 @@
       {
         "id": "byvj8",
         "name": "Add quick edit of ticket name",
-        "status": "idea",
+        "status": "done",
         "type": "bug",
         "fileName": "byvj8-add-quick-edit-of-ticket-name.md"
       },
       {
         "id": "dz55s",
         "name": "Save filters in localStorage and persist on navigating projects/repos",
-        "status": "idea",
+        "status": "done",
         "type": "",
         "fileName": "dz55s-save-filters-in-localstorage-and-persist-on-navigating-projects-repos.md"
       }

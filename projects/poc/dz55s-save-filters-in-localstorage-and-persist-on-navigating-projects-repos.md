@@ -1,7 +1,7 @@
 ---
 id: dz55s
 name: Save filters in localStorage and persist on navigating projects/repos
-status: 
+status: done
 type: 
 estimate: 
 complexity: 

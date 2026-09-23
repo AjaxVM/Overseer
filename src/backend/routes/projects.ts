@@ -281,6 +281,50 @@ export function handlePostProjectReorder(req: any, res: any) {
   });
 }
 
+// Display-name-only rename - the directory slug and every child path stay as-is.
+export function handlePostProjectRename(ctx: RouteContext, req: any, res: any) {
+  let reqBody = '';
+  req.on('data', (chunk: string) => {
+    reqBody += chunk;
+  });
+  req.on('end', () => {
+    try {
+      const { projectPath, name } = JSON.parse(reqBody);
+      if (!projectPath || !fs.existsSync(projectPath) || !name || !String(name).trim()) {
+        throw new Error('Valid projectPath and name are required.');
+      }
+      const manifest = readRawProjectManifest(projectPath);
+      if (!manifest) {
+        throw new Error('Project manifest not found');
+      }
+      manifest.name = String(name).trim();
+      saveProjectManifest(projectPath, manifest);
+
+      // A sub-project's display name is also cached on its PARENT's manifest (see
+      // loadOrTrueUpProject's subManifestCache) - the file watcher only trues up the
+      // renamed directory itself (dirname of the changed _project.json), never the
+      // parent that lists it, so without this the parent's Sub-projects list keeps
+      // showing the old name until something else happens to rescan it.
+      const repoRoot = Array.from(ctx.watchedRepoRoots).find(root => projectPath.startsWith(root));
+      if (repoRoot) {
+        const repoConfig = getOrInitRepoConfig(repoRoot);
+        const projectsRoot = path.join(repoRoot, repoConfig.projectsDir);
+        const parentDir = path.dirname(projectPath);
+        if (parentDir !== projectsRoot && parentDir.startsWith(projectsRoot)) {
+          loadOrTrueUpProject(parentDir, repoConfig);
+        }
+      }
+
+      ctx.server.ws.send({ type: 'custom', event: 'projects-update' });
+      res.setHeader('Content-Type', 'application/json');
+      return res.end(JSON.stringify({ success: true }));
+    } catch (e: any) {
+      res.statusCode = 400;
+      return res.end(JSON.stringify({ error: e.message }));
+    }
+  });
+}
+
 export function handlePostItemCreate(ctx: RouteContext, req: any, res: any) {
   let reqBody = '';
   req.on('data', (chunk: string) => {

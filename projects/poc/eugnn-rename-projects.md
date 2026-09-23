@@ -1,7 +1,7 @@
 ---
 id: eugnn
 name: Rename projects
-status: idea
+status: done
 type: 
 estimate: tiny
 complexity: simple

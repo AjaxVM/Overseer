@@ -1,7 +1,7 @@
 ---
 id: byvj8
 name: Add quick edit of ticket name
-status: idea
+status: done
 type: bug
 estimate: tiny
 complexity: simple
