@@ -154,13 +154,6 @@
         "fileName": "wfjmd-support-more-filtering-specifically-type-status.md"
       },
       {
-        "id": "poc-18",
-        "name": "Typing in the name/metadata field is losing focus each key press",
-        "status": "idea",
-        "type": "bug",
-        "fileName": "18-typing-in-the-name-metadata-field-is-losing-focus-each-key-press.md"
-      },
-      {
         "id": "poc-19",
         "name": "Some buttons (ie create modal) don't show a hand/pointer on hover",
         "status": "idea",
@@ -222,6 +215,14 @@
         "status": "idea",
         "type": "feature",
         "fileName": "qk7pf-track-assignee-history-per-status-transition.md"
+      },
+      {
+        "id": "vq9ss",
+        "name": "Add reset filters to sidebar, and show helper if no results due to filtering",
+        "status": "idea",
+        "type": "",
+        "assignee": "",
+        "fileName": "vq9ss-add-reset-filters-to-sidebar-and-show-helper-if-no-results-due-to-filtering.md"
       }
     ],
     "subprojects": []

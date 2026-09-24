@@ -305,6 +305,76 @@ function CheckboxFilterDropdown(props: {
   );
 }
 
+// Houses the Type and Assignee filter dropdowns behind a single "More filters" trigger
+// so the status/search row stays uncluttered. The dot cue exists because those two
+// filters are otherwise invisible while the popover is closed.
+function MoreFiltersPopover(props: { hasActive: boolean; children: JSX.Element }) {
+  const [open, setOpen] = createSignal(false);
+  let containerRef: HTMLDivElement | undefined;
+
+  const handleClickOutside = (e: MouseEvent) => {
+    if (containerRef && !containerRef.contains(e.target as Node)) setOpen(false);
+  };
+
+  createEffect(() => {
+    if (open()) document.addEventListener('mousedown', handleClickOutside);
+    else document.removeEventListener('mousedown', handleClickOutside);
+  });
+  onCleanup(() => document.removeEventListener('mousedown', handleClickOutside));
+
+  return (
+    <div ref={containerRef} style={{ position: 'relative', 'flex-shrink': 0 }}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display: 'flex',
+          'align-items': 'center',
+          gap: '4px',
+          border: 'none',
+          background: 'transparent',
+          padding: '0 2px',
+          height: '28px',
+          'font-family': font.sans,
+          'font-size': '0.74rem',
+          color: colors.inkSoft,
+          'text-decoration': 'underline',
+          'text-decoration-style': 'dotted',
+          'text-underline-offset': '3px',
+          'white-space': 'nowrap',
+          cursor: 'pointer'
+        }}
+      >
+        More filters
+        <Show when={props.hasActive}>
+          <span style={{ width: '6px', height: '6px', 'border-radius': '50%', background: colors.blue, 'flex-shrink': 0 }} />
+        </Show>
+      </button>
+      <Show when={open()}>
+        <div
+          style={{
+            position: 'absolute',
+            top: 'calc(100% + 4px)',
+            right: 0,
+            'z-index': 20,
+            width: '190px',
+            display: 'flex',
+            'flex-direction': 'column',
+            gap: '6px',
+            background: colors.paperCard,
+            border: `1px solid ${colors.border}`,
+            'border-radius': '7px',
+            'box-shadow': '0 4px 14px rgba(30,42,56,.18)',
+            padding: '6px'
+          }}
+        >
+          {props.children}
+        </div>
+      </Show>
+    </div>
+  );
+}
+
 export default function Sidebar(props: SidebarProps) {
   const [isSubprojectsOpen, setIsSubprojectsOpen] = createSignal(localStorage.getItem('overseer:panel:subprojects') !== 'false');
   const [isTicketsOpen, setIsTicketsOpen] = createSignal(localStorage.getItem('overseer:panel:tickets') !== 'false');
@@ -405,6 +475,16 @@ export default function Sidebar(props: SidebarProps) {
     setExcludedPersist(setTypeExcluded, 'overseer:filter:type:excluded', next);
   const setAssigneeExcludedPersist = (next: Set<string>) =>
     setExcludedPersist(setAssigneeExcluded, 'overseer:filter:assignee:excluded', next);
+
+  const isFilterActive = () =>
+    ticketSearch().trim() !== '' || statusExcluded().size > 0 || typeExcluded().size > 0 || assigneeExcluded().size > 0;
+
+  const resetFilters = () => {
+    setTicketSearchPersist('');
+    setStatusExcludedPersist(new Set());
+    setTypeExcludedPersist(new Set());
+    setAssigneeExcludedPersist(new Set());
+  };
 
   const getParentFolderName = () => {
     const pPath = props.projectData()?.parentPath;
@@ -822,31 +902,6 @@ export default function Sidebar(props: SidebarProps) {
                     }}
                   />
                 </div>
-                <select
-                  value={sortOption()}
-                  onChange={e => handleSortChange(e.currentTarget.value as any)}
-                  style={{
-                    'box-sizing': 'border-box',
-                    height: '28px',
-                    'font-family': font.sans,
-                    'font-size': '0.74rem',
-                    border: `1px solid ${colors.border}`,
-                    'border-radius': '7px',
-                    padding: '0 6px',
-                    background: colors.paperCard,
-                    color: colors.inkSoft,
-                    'flex-shrink': 0,
-                    cursor: 'pointer'
-                  }}
-                >
-                  <option value="manifest">Default</option>
-                  <option value="status">Status</option>
-                  <option value="name">Name</option>
-                  <option value="id">ID</option>
-                </select>
-              </div>
-
-              <div style={{ display: 'flex', gap: '6px', 'align-items': 'center', 'margin-bottom': '8px' }}>
                 <CheckboxFilterDropdown
                   label="statuses"
                   options={getFieldOptions('status')}
@@ -854,32 +909,111 @@ export default function Sidebar(props: SidebarProps) {
                   onChange={setStatusExcludedPersist}
                   getBadgeStyle={v => getStatusBadgeStyle(v, getFieldOptionColors('status'))}
                 />
-                <CheckboxFilterDropdown
-                  label="types"
-                  options={getFieldOptions('type')}
-                  excluded={typeExcluded()}
-                  onChange={setTypeExcludedPersist}
-                  getBadgeStyle={v => getTypeBadgeStyle(v, getFieldOptionColors('type'))}
-                />
-                <CheckboxFilterDropdown
-                  label="assignees"
-                  options={[UNASSIGNED, ...getFieldOptions('assignee')]}
-                  excluded={assigneeExcluded()}
-                  onChange={setAssigneeExcludedPersist}
-                  getBadgeStyle={v =>
-                    v === UNASSIGNED
-                      ? { bg: colors.inkTint, text: colors.inkSoft }
-                      : getAssigneeBadgeStyle(v, getFieldOptionColors('assignee'))
-                  }
-                />
+                <MoreFiltersPopover hasActive={typeExcluded().size > 0 || assigneeExcluded().size > 0}>
+                  <CheckboxFilterDropdown
+                    label="types"
+                    options={getFieldOptions('type')}
+                    excluded={typeExcluded()}
+                    onChange={setTypeExcludedPersist}
+                    getBadgeStyle={v => getTypeBadgeStyle(v, getFieldOptionColors('type'))}
+                  />
+                  <CheckboxFilterDropdown
+                    label="assignees"
+                    options={[UNASSIGNED, ...getFieldOptions('assignee')]}
+                    excluded={assigneeExcluded()}
+                    onChange={setAssigneeExcludedPersist}
+                    getBadgeStyle={v =>
+                      v === UNASSIGNED
+                        ? { bg: colors.inkTint, text: colors.inkSoft }
+                        : getAssigneeBadgeStyle(v, getFieldOptionColors('assignee'))
+                    }
+                  />
+                </MoreFiltersPopover>
+              </div>
+
+              <div style={{ display: 'flex', 'justify-content': 'space-between', 'align-items': 'center', 'margin-bottom': '8px' }}>
+                <div style={{ display: 'flex', gap: '6px', 'align-items': 'center' }}>
+                  <span style={{ 'font-family': font.sans, 'font-size': '0.72rem', color: colors.inkFaint }}>Sort</span>
+                  <select
+                    value={sortOption()}
+                    onChange={e => handleSortChange(e.currentTarget.value as any)}
+                    style={{
+                      'box-sizing': 'border-box',
+                      height: '28px',
+                      'font-family': font.sans,
+                      'font-size': '0.74rem',
+                      border: `1px solid ${colors.border}`,
+                      'border-radius': '7px',
+                      padding: '0 6px',
+                      background: colors.paperCard,
+                      color: colors.inkSoft,
+                      'flex-shrink': 0,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="manifest">Default</option>
+                    <option value="status">Status</option>
+                    <option value="name">Name</option>
+                    <option value="id">ID</option>
+                  </select>
+                </div>
+                <Show when={isFilterActive()}>
+                  <button
+                    type="button"
+                    onClick={resetFilters}
+                    style={{
+                      display: 'flex',
+                      'align-items': 'center',
+                      gap: '4px',
+                      border: 'none',
+                      background: 'transparent',
+                      padding: 0,
+                      'font-family': font.sans,
+                      'font-size': '0.72rem',
+                      'font-weight': 600,
+                      color: colors.blue,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <Icon name="cornerUpLeft" size={12} />
+                    Reset
+                  </button>
+                </Show>
               </div>
             </Show>
 
             <Show
               when={filteredAndSortedTickets().length > 0}
               fallback={
-                <div style={{ color: colors.inkFaint, 'font-family': font.sans, 'font-size': '0.8rem', 'text-align': 'center', padding: '14px 0' }}>
-                  No tickets yet.
+                <div style={{ 'text-align': 'center', padding: '14px 0' }}>
+                  <div style={{ color: colors.inkFaint, 'font-family': font.sans, 'font-size': '0.8rem' }}>
+                    {(props.projectData()?.manifest.projectmap.tickets || []).length === 0
+                      ? 'No tickets yet.'
+                      : 'No tickets match your filters.'}
+                  </div>
+                  <Show when={(props.projectData()?.manifest.projectmap.tickets || []).length > 0 && isFilterActive()}>
+                    <button
+                      type="button"
+                      onClick={resetFilters}
+                      style={{
+                        display: 'inline-flex',
+                        'align-items': 'center',
+                        gap: '4px',
+                        border: 'none',
+                        background: 'transparent',
+                        padding: 0,
+                        'margin-top': '6px',
+                        'font-family': font.sans,
+                        'font-size': '0.72rem',
+                        'font-weight': 600,
+                        color: colors.blue,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <Icon name="cornerUpLeft" size={12} />
+                      Reset
+                    </button>
+                  </Show>
                 </div>
               }
             >
