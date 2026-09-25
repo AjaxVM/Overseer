@@ -1,5 +1,6 @@
 import { createSignal, createEffect } from 'solid-js';
 import type {
+  AttachmentSummary,
   FrontmatterItem,
   SchemaField,
   ProjectDetailsResponse,
@@ -40,7 +41,7 @@ export default function App() {
   const [projectData, setProjectData] = createSignal<ProjectDetailsResponse | null>(null);
 
   // Active File & Workspace
-  const [activeTab, setActiveTab] = createSignal<'preview' | 'edit'>('preview');
+  const [activeTab, setActiveTab] = createSignal<'preview' | 'edit' | 'attachments'>('preview');
   const [activeFilePath, setActiveFilePath] = createSignal<string | null>(null);
   const [activeTicketName, setActiveTicketName] = createSignal<string | null>(null);
   const [activeTicketId, setActiveTicketId] = createSignal<string | null>(null);
@@ -218,7 +219,11 @@ export default function App() {
         await loadProject(projectDir, targetRepo.repoPath, false);
         if (isProjectOverviewFile(absTarget, projectDir)) {
           handleOpenProjectDescription();
-        } else {
+        } else if (absTarget !== activeFilePath()) {
+          // A redundant reopen of the already-active file (e.g. triggered by another
+          // attachment's create/delete broadcasting projects-update) would otherwise reset
+          // activeTab back to 'preview' and re-fetch over any in-progress edits - loadProject
+          // just above already refreshed the manifest/attachments, so there's nothing left to do.
           handleOpenFile(absTarget, targetRepo.repoPath);
         }
       } else {
@@ -442,6 +447,56 @@ export default function App() {
     if (!filePath) return false;
     if (filePath.endsWith('_project.md')) return !!projectData()?.parentPath;
     return true;
+  };
+
+  // Stays live for free: any attachment mutation broadcasts projects-update, which the
+  // WS listener below already turns into a loadProject() refresh.
+  const activeTicketAttachments = () => {
+    const filePath = activeFilePath();
+    if (!filePath) return [];
+    return projectData()?.manifest.projectmap.tickets.find(t => t.filePath === filePath)?.attachments || [];
+  };
+
+  const handleAttachFile = async (
+    sourcePath: string,
+    name: string,
+    overwrite?: boolean,
+    blank?: boolean
+  ): Promise<{ success: boolean; error?: string; fileName?: string }> => {
+    const parentPath = activeProjectPath();
+    const ticketId = activeTicketId();
+    if (!parentPath || !ticketId) return { success: false, error: 'No ticket is open.' };
+    try {
+      const res = await fetch('/api/attachment/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ parentPath, repoPath: activeRepoPath(), ticketId, sourcePath, name, overwrite, blank })
+      });
+      const data = await res.json();
+      if (!res.ok) return { success: false, error: data.error || 'Failed to attach file' };
+      await loadProject(parentPath, activeRepoPath() || undefined);
+      return { success: true, fileName: data.fileName };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  };
+
+  const handleDeleteAttachment = async (attachment: AttachmentSummary) => {
+    if (!window.confirm(`Delete attachment "${attachment.name}"? This can't be undone.`)) return;
+    const parentPath = activeProjectPath();
+    if (!parentPath) return;
+    try {
+      const res = await fetch('/api/attachment/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attachmentPath: attachment.filePath, parentPath, repoPath: activeRepoPath() })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to delete attachment');
+      loadProject(parentPath, activeRepoPath() || undefined);
+    } catch (err: any) {
+      alert(err.message);
+    }
   };
 
   const handleDeleteActiveItem = async () => {
@@ -690,6 +745,9 @@ export default function App() {
         onRenameActiveItem={handleRenameActiveItem}
         pendingSync={() => projectData()?.pendingSync ?? false}
         onSyncProject={handleSyncProject}
+        activeTicketAttachments={activeTicketAttachments}
+        onAttachFile={handleAttachFile}
+        onDeleteAttachment={handleDeleteAttachment}
       />
 
       <AddRepoModal

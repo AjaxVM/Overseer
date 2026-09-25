@@ -1,6 +1,14 @@
 import fs from 'fs';
 import path from 'path';
 
+export interface AttachmentSummary {
+  name: string;
+  slug: string;
+  ext: string;
+  fileName: string;
+  filePath: string; // derived at read time from (dir, fileName) - never persisted
+}
+
 export interface TicketSummary {
   id: string;
   name: string;
@@ -9,6 +17,7 @@ export interface TicketSummary {
   assignee?: string;
   fileName: string;
   filePath: string; // derived at read time from (dir, fileName) - never persisted
+  attachments: AttachmentSummary[]; // always recomputed from a directory scan, never mtime-cached (see loadOrTrueUpProject)
 }
 
 export interface SubProjectSummary {
@@ -27,6 +36,13 @@ export interface ProjectManifest {
   };
 }
 
+interface PersistedAttachmentSummary {
+  name: string;
+  slug: string;
+  ext: string;
+  fileName: string;
+}
+
 // On-disk shape only - no absolute paths, no filesystem mtimes, so the file is safe to
 // commit and diffs stay stable across machines/collaborators.
 interface PersistedTicketSummary {
@@ -36,6 +52,9 @@ interface PersistedTicketSummary {
   type?: string;
   assignee?: string;
   fileName: string;
+  // Omitted entirely when a ticket has none, so the vast majority of existing tickets
+  // don't pick up empty-array noise in _project.json.
+  attachments?: PersistedAttachmentSummary[];
 }
 
 interface PersistedSubProjectSummary {
@@ -73,7 +92,12 @@ function toPersistedManifest(manifest: ProjectManifest): PersistedProjectManifes
     id: manifest.id,
     descriptionFile: manifest.descriptionFile,
     projectmap: {
-      tickets: manifest.projectmap.tickets.map(({ filePath, ...rest }) => rest),
+      tickets: manifest.projectmap.tickets.map(({ filePath, attachments, ...rest }) => ({
+        ...rest,
+        ...(attachments.length > 0
+          ? { attachments: attachments.map(({ filePath: _fp, ...a }) => a) }
+          : {})
+      })),
       subprojects: manifest.projectmap.subprojects.map(({ path: _path, ...rest }) => rest)
     }
   };
@@ -130,6 +154,34 @@ export function generateShortId(prefix?: string): string {
     code += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return prefix ? `${prefix}-${code}` : code;
+}
+
+export const ATTACHMENT_EXTENSIONS = ['md', 'html', 'jpg', 'jpeg', 'png'];
+
+// `<ticketId>.attachment.<slug>.<ext>` - dots never otherwise appear in a ticket
+// filename (`<id>-<slug>.md` uses only hyphens, and slugify() strips to [a-z0-9-]), so
+// `.attachment.` is an unambiguous marker regardless of id scheme (short-uuid or
+// hierarchical/sequential).
+const ATTACHMENT_FILENAME_RE = /^(.+)\.attachment\.(.+)\.(md|html|jpe?g|png)$/i;
+
+export function isAttachmentFileName(fileName: string): boolean {
+  return ATTACHMENT_FILENAME_RE.test(fileName);
+}
+
+export function parseAttachmentFileName(fileName: string): { ticketId: string; slug: string; ext: string } | null {
+  const match = fileName.match(ATTACHMENT_FILENAME_RE);
+  if (!match) return null;
+  return { ticketId: match[1], slug: match[2], ext: match[3].toLowerCase() };
+}
+
+export function buildAttachmentFileName(ticketId: string, slug: string, ext: string): string {
+  return `${ticketId}.attachment.${slug}.${ext}`;
+}
+
+// Display-name fallback for an attachment true-up finds with no previously-known name
+// to borrow (see loadOrTrueUpProject) - slugs are lossy, so this is only approximate.
+function unslugify(slug: string): string {
+  return slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
 export function parseFrontmatter(rawContent: string): { attributes: Record<string, any>; body: string } {
@@ -198,7 +250,14 @@ export function readRawProjectManifest(dir: string): ProjectManifest | null {
       type: t.type,
       assignee: t.assignee,
       fileName: t.fileName,
-      filePath: path.join(dir, t.fileName)
+      filePath: path.join(dir, t.fileName),
+      attachments: (t.attachments || []).map((a: any) => ({
+        name: a.name,
+        slug: a.slug,
+        ext: a.ext,
+        fileName: a.fileName,
+        filePath: path.join(dir, a.fileName)
+      }))
     }));
     const subprojects: SubProjectSummary[] = (data.projectmap?.subprojects || []).map((s: any) => ({
       name: s.name,
@@ -241,22 +300,42 @@ export function buildShallowManifest(projectDir: string): ProjectManifest {
     .map(entry => ({ name: entry.name, slug: entry.name, path: path.join(projectDir, entry.name) }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
+  const attachmentsByTicketId = new Map<string, AttachmentSummary[]>();
+  entries
+    .filter(entry => entry.isFile() && isAttachmentFileName(entry.name))
+    .forEach(entry => {
+      const parsed = parseAttachmentFileName(entry.name);
+      if (!parsed) return;
+      const list = attachmentsByTicketId.get(parsed.ticketId) || [];
+      list.push({
+        name: unslugify(parsed.slug),
+        slug: parsed.slug,
+        ext: parsed.ext,
+        fileName: entry.name,
+        filePath: path.join(projectDir, entry.name)
+      });
+      attachmentsByTicketId.set(parsed.ticketId, list);
+    });
+
   const ignoredFiles = new Set(['_project.md', 'description.md', 'notes.md', 'comments.md']);
   const tickets: TicketSummary[] = entries
     .filter(
       entry =>
         entry.isFile() &&
         entry.name.toLowerCase().endsWith('.md') &&
-        !ignoredFiles.has(entry.name.toLowerCase())
+        !ignoredFiles.has(entry.name.toLowerCase()) &&
+        !isAttachmentFileName(entry.name)
     )
     .map(entry => {
       const filenameParts = entry.name.replace(/\.md$/i, '').split('-');
+      const id = filenameParts[0] || '';
       return {
-        id: filenameParts[0] || '',
+        id,
         name: filenameParts.slice(1).join(' ') || entry.name,
         status: 'idea',
         fileName: entry.name,
-        filePath: path.join(projectDir, entry.name)
+        filePath: path.join(projectDir, entry.name),
+        attachments: attachmentsByTicketId.get(id) || []
       };
     })
     .sort((a, b) => {
@@ -359,14 +438,41 @@ export function loadOrTrueUpProject(
     s => s.slug
   );
 
-  // 2. Detect tickets (.md files excluding _project.md / description.md / notes.md / comments.md)
+  // 2. Detect tickets (.md files excluding _project.md / description.md / notes.md /
+  // comments.md / attachment files)
   const ignoredFiles = new Set(['_project.md', 'description.md', 'notes.md', 'comments.md']);
   const ticketFiles = entries.filter(
     entry =>
       entry.isFile() &&
       entry.name.toLowerCase().endsWith('.md') &&
-      !ignoredFiles.has(entry.name.toLowerCase())
+      !ignoredFiles.has(entry.name.toLowerCase()) &&
+      !isAttachmentFileName(entry.name)
   );
+
+  // 2a. Detect attachments (any extension, not just .md) and group by owning ticket id.
+  // A known attachment keeps its previously-stored display name (slugs are lossy) -
+  // same "preserve what's already known" pattern as subprojects/tickets above.
+  const existingAttachmentNameByFileName = new Map<string, string>();
+  (existingManifest.projectmap?.tickets || []).forEach(t => {
+    (t.attachments || []).forEach(a => existingAttachmentNameByFileName.set(a.fileName, a.name));
+  });
+
+  const attachmentsByTicketId = new Map<string, AttachmentSummary[]>();
+  entries
+    .filter(entry => entry.isFile() && isAttachmentFileName(entry.name))
+    .forEach(entry => {
+      const parsed = parseAttachmentFileName(entry.name);
+      if (!parsed) return;
+      const list = attachmentsByTicketId.get(parsed.ticketId) || [];
+      list.push({
+        name: existingAttachmentNameByFileName.get(entry.name) || unslugify(parsed.slug),
+        slug: parsed.slug,
+        ext: parsed.ext,
+        fileName: entry.name,
+        filePath: path.join(projectDir, entry.name)
+      });
+      attachmentsByTicketId.set(parsed.ticketId, list);
+    });
 
   const scannedTickets = new Map<string, TicketSummary>();
 
@@ -375,9 +481,10 @@ export function loadOrTrueUpProject(
     try {
       const stat = fs.statSync(filePath);
       const cached = ticketCache.get(filePath);
+      let ticketSummary: TicketSummary;
 
       if (cached && cached.mtime === stat.mtimeMs) {
-        scannedTickets.set(fileEntry.name, cached.summary);
+        ticketSummary = cached.summary;
       } else {
         const raw = fs.readFileSync(filePath, 'utf-8');
         const { attributes, body } = parseFrontmatter(raw);
@@ -390,18 +497,26 @@ export function loadOrTrueUpProject(
           filenameParts.slice(1).join(' ') ||
           fileEntry.name;
 
-        const ticketSummary: TicketSummary = {
+        ticketSummary = {
           id: String(defaultId),
           name: String(defaultName),
           status: attributes.status || 'idea',
           type: attributes.type,
           assignee: attributes.assignee,
           fileName: fileEntry.name,
-          filePath
+          filePath,
+          attachments: [] // overwritten below on every scan - see note above
         };
         ticketCache.set(filePath, { mtime: stat.mtimeMs, summary: ticketSummary });
-        scannedTickets.set(fileEntry.name, ticketSummary);
       }
+
+      // Attachments are recomputed fresh on every scan, cache hit or not - the ticket
+      // file's own mtime never changes when an attachment is added/removed/edited, so a
+      // cache hit above would otherwise serve a stale attachments list.
+      scannedTickets.set(fileEntry.name, {
+        ...ticketSummary,
+        attachments: attachmentsByTicketId.get(ticketSummary.id) || []
+      });
     } catch (e) {
       // Skip files that fail to stat or read
     }
@@ -508,7 +623,8 @@ export function syncTicketToManifest(
       type: attributes.type || undefined,
       assignee: attributes.assignee || undefined,
       fileName,
-      filePath: ticketFilePath
+      filePath: ticketFilePath,
+      attachments: []
     });
   }
 

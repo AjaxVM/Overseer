@@ -8,6 +8,7 @@ import {
   saveProjectManifest,
   buildShallowManifest,
   generateShortId,
+  isAttachmentFileName,
   stringifyFrontmatter,
   syncTicketToManifest,
   reorderByKeys,
@@ -16,7 +17,7 @@ import {
 } from '../manifest';
 import type { RouteContext } from '../types';
 
-function slugify(text: string): string {
+export function slugify(text: string): string {
   return text
     .toLowerCase()
     .trim()
@@ -30,6 +31,7 @@ function getNextTicketNumber(parentDir: string): number {
   const files = entries
     .filter(entry => entry.isFile())
     .filter(entry => entry.name.toLowerCase().endsWith('.md'))
+    .filter(entry => !isAttachmentFileName(entry.name))
     .map(entry => entry.name);
   if (files.length === 0) {
     return 1;

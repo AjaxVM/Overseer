@@ -1,11 +1,13 @@
-import { createEffect, createSignal, onCleanup, For, Index, Show } from 'solid-js';
+import { createEffect, createSignal, onCleanup, For, Index, Match, Show, Switch } from 'solid-js';
 import type { Accessor, Setter } from 'solid-js';
 import { marked } from 'marked';
 import Icon from './Icon';
 import InlineEditText from './InlineEditText';
 import { colors, deriveShorthand, font, getAssigneeBadgeStyle, getStatusBadgeStyle, getTypeBadgeStyle } from './theme';
 import type { BadgeStyle } from './theme';
-import type { FrontmatterItem, RepoTreeNode, SchemaField } from './types';
+import type { AttachmentSummary, FrontmatterItem, RepoTreeNode, SchemaField } from './types';
+
+const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png'];
 
 marked.setOptions({
   gfm: true,
@@ -18,8 +20,8 @@ interface WorkspaceProps {
   activeFilePath: Accessor<string | null>;
   activeTicketId: Accessor<string | null>;
   activeTicketName: Accessor<string | null>;
-  activeTab: Accessor<'preview' | 'edit'>;
-  setActiveTab: Setter<'preview' | 'edit'>;
+  activeTab: Accessor<'preview' | 'edit' | 'attachments'>;
+  setActiveTab: Setter<'preview' | 'edit' | 'attachments'>;
   attributes: Accessor<FrontmatterItem[]>;
   setAttributes: Setter<FrontmatterItem[]>;
   markdownBody: Accessor<string>;
@@ -32,9 +34,17 @@ interface WorkspaceProps {
   onRenameActiveItem: (newName: string) => void;
   pendingSync: Accessor<boolean>;
   onSyncProject: () => void;
+  activeTicketAttachments: Accessor<AttachmentSummary[]>;
+  onAttachFile: (
+    sourcePath: string,
+    name: string,
+    overwrite?: boolean,
+    blank?: boolean
+  ) => Promise<{ success: boolean; error?: string; fileName?: string }>;
+  onDeleteAttachment: (attachment: AttachmentSummary) => void;
 }
 
-function TabButton(props: { active: boolean; icon: 'eye' | 'pencil'; label: string; onClick: () => void }) {
+function TabButton(props: { active: boolean; icon: 'eye' | 'pencil' | 'file'; label: string; onClick: () => void }) {
   return (
     <button
       onClick={props.onClick}
@@ -293,6 +303,101 @@ export default function Workspace(props: WorkspaceProps) {
   const nonBuiltInAttributes = () =>
     props.attributes().filter(a => !['id', 'status', 'type', 'assignee'].includes(a.key.trim().toLowerCase()));
 
+  // ATTACHMENTS TAB state - kept local to Workspace rather than threaded through App.tsx,
+  // since it's editing a separate file from the ticket's own body/attributes and
+  // shouldn't be entangled with that dirty-tracking.
+  const [attachSourcePath, setAttachSourcePath] = createSignal('');
+  const [attachName, setAttachName] = createSignal('');
+  const [attachError, setAttachError] = createSignal('');
+  const [attachPendingOverwrite, setAttachPendingOverwrite] = createSignal(false);
+  const [selectedAttachment, setSelectedAttachment] = createSignal<AttachmentSummary | null>(null);
+  const [attachmentContent, setAttachmentContent] = createSignal('');
+  const [isEditingAttachment, setIsEditingAttachment] = createSignal(false);
+  const [attachmentEditBuffer, setAttachmentEditBuffer] = createSignal('');
+  const [attachmentSaveStatus, setAttachmentSaveStatus] = createSignal('');
+
+  const resetAttachForm = () => {
+    setAttachSourcePath('');
+    setAttachName('');
+    setAttachError('');
+    setAttachPendingOverwrite(false);
+  };
+
+  const handleAttachInputChange = () => {
+    setAttachError('');
+    setAttachPendingOverwrite(false);
+  };
+
+  const isAttachmentDirty = () => isEditingAttachment() && attachmentEditBuffer() !== attachmentContent();
+
+  const confirmDiscardAttachmentIfDirty = () => {
+    if (!isAttachmentDirty()) return true;
+    return window.confirm('You have unsaved changes. Discard them and continue?');
+  };
+
+  const selectAttachment = async (attachment: AttachmentSummary) => {
+    if (!confirmDiscardAttachmentIfDirty()) return;
+    setSelectedAttachment(attachment);
+    setIsEditingAttachment(false);
+    setAttachmentSaveStatus('');
+    setAttachmentContent('');
+    if (attachment.ext === 'md' || attachment.ext === 'html') {
+      const res = await fetch(`/api/attachment/read?path=${encodeURIComponent(attachment.filePath)}`);
+      const data = await res.json();
+      if (res.ok) setAttachmentContent(data.content || '');
+    }
+  };
+
+  const startEditAttachment = () => {
+    setAttachmentEditBuffer(attachmentContent());
+    setIsEditingAttachment(true);
+    setAttachmentSaveStatus('');
+  };
+
+  const handleAttachSubmit = async (blank: boolean) => {
+    const result = await props.onAttachFile(attachSourcePath().trim(), attachName().trim(), attachPendingOverwrite(), blank);
+    if (!result.success) {
+      setAttachError(result.error || 'Failed to attach file');
+      setAttachPendingOverwrite(!!result.error?.toLowerCase().includes('already exists'));
+      return;
+    }
+    resetAttachForm();
+
+    // Drop straight into editing a freshly-created blank doc - that's the whole point
+    // of offering it, so the person doesn't have to re-select it from the list.
+    const created = props.activeTicketAttachments().find(a => a.fileName === result.fileName);
+    if (created) {
+      await selectAttachment(created);
+      if (blank) startEditAttachment();
+    }
+  };
+
+  const backToAttachmentPreview = () => {
+    if (!confirmDiscardAttachmentIfDirty()) return;
+    setIsEditingAttachment(false);
+    setAttachmentSaveStatus('');
+  };
+
+  const handleSaveAttachment = async () => {
+    const attachment = selectedAttachment();
+    if (!attachment) return;
+    setAttachmentSaveStatus('Saving…');
+    try {
+      const res = await fetch('/api/attachment/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: attachment.filePath, content: attachmentEditBuffer() })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save attachment');
+      setAttachmentContent(attachmentEditBuffer());
+      setIsEditingAttachment(false);
+      setAttachmentSaveStatus('Saved');
+    } catch (err: any) {
+      setAttachmentSaveStatus(`Error: ${err.message}`);
+    }
+  };
+
   return (
     <div
       style={{
@@ -480,6 +585,14 @@ export default function Workspace(props: WorkspaceProps) {
         <div style={{ display: 'flex', gap: '18px', 'border-bottom': `1px solid ${colors.border}`, 'margin-bottom': '22px' }}>
           <TabButton active={props.activeTab() === 'preview'} icon="eye" label="Preview" onClick={() => props.setActiveTab('preview')} />
           <TabButton active={props.activeTab() === 'edit'} icon="pencil" label="Edit" onClick={() => props.setActiveTab('edit')} />
+          <Show when={!props.activeFilePath()?.endsWith('_project.md')}>
+            <TabButton
+              active={props.activeTab() === 'attachments'}
+              icon="file"
+              label={`Attachments${props.activeTicketAttachments().length > 0 ? ` (${props.activeTicketAttachments().length})` : ''}`}
+              onClick={() => props.setActiveTab('attachments')}
+            />
+          </Show>
         </div>
 
         {/* TAB 1: PREVIEW */}
@@ -808,6 +921,287 @@ export default function Workspace(props: WorkspaceProps) {
                   outline: 'none'
                 }}
               />
+            </div>
+          </div>
+        </Show>
+
+        {/* TAB 3: ATTACHMENTS */}
+        <Show when={props.activeTab() === 'attachments'}>
+          <div style={{ flex: 1, display: 'flex', 'flex-direction': 'column', gap: '22px', 'min-height': '0' }}>
+            <div style={{ background: colors.paperDim, 'border-radius': '9px', padding: '16px' }}>
+              <h4 style={{ margin: '0 0 10px 0', 'font-family': font.sans, 'font-size': '0.86rem', 'font-weight': 600, color: colors.inkSoft }}>
+                Attach a file
+              </h4>
+              <div style={{ display: 'flex', gap: '8px', 'flex-wrap': 'wrap', 'align-items': 'center' }}>
+                <input
+                  type="text"
+                  placeholder="Name"
+                  value={attachName()}
+                  onInput={e => {
+                    setAttachName(e.currentTarget.value);
+                    handleAttachInputChange();
+                  }}
+                  style={{
+                    flex: 1,
+                    'min-width': '140px',
+                    padding: '7px 10px',
+                    border: `1px solid ${colors.border}`,
+                    'border-radius': '6px',
+                    'font-family': font.sans,
+                    'font-size': '0.85rem',
+                    color: colors.ink,
+                    background: colors.paperCard
+                  }}
+                />
+                <input
+                  type="text"
+                  placeholder="Local file path (.md, .html, .jpg, .png) - leave blank to write one in-app instead"
+                  value={attachSourcePath()}
+                  onInput={e => {
+                    setAttachSourcePath(e.currentTarget.value);
+                    handleAttachInputChange();
+                  }}
+                  style={{
+                    flex: 2,
+                    'min-width': '280px',
+                    padding: '7px 10px',
+                    border: `1px solid ${colors.border}`,
+                    'border-radius': '6px',
+                    'font-family': font.sans,
+                    'font-size': '0.85rem',
+                    color: colors.ink,
+                    background: colors.paperCard
+                  }}
+                />
+                <button
+                  onClick={() => handleAttachSubmit(false)}
+                  disabled={!attachSourcePath().trim() || !attachName().trim()}
+                  style={{
+                    background: attachPendingOverwrite() ? colors.rust : colors.blue,
+                    color: colors.paperCard,
+                    border: 'none',
+                    padding: '8px 16px',
+                    'border-radius': '7px',
+                    cursor: attachSourcePath().trim() && attachName().trim() ? 'pointer' : 'default',
+                    opacity: attachSourcePath().trim() && attachName().trim() ? 1 : 0.6,
+                    'font-family': font.sans,
+                    'font-weight': 600,
+                    'font-size': '0.82rem'
+                  }}
+                >
+                  {attachPendingOverwrite() ? 'Overwrite existing' : 'Attach from path'}
+                </button>
+                <button
+                  onClick={() => handleAttachSubmit(true)}
+                  disabled={!attachName().trim()}
+                  style={{
+                    display: 'flex',
+                    'align-items': 'center',
+                    gap: '6px',
+                    background: 'transparent',
+                    color: colors.inkSoft,
+                    border: `1px solid ${colors.border}`,
+                    padding: '8px 16px',
+                    'border-radius': '7px',
+                    cursor: attachName().trim() ? 'pointer' : 'default',
+                    opacity: attachName().trim() ? 1 : 0.6,
+                    'font-family': font.sans,
+                    'font-weight': 600,
+                    'font-size': '0.82rem'
+                  }}
+                >
+                  <Icon name="plus" size={12} /> New markdown doc
+                </button>
+              </div>
+              <Show when={attachError()}>
+                <div style={{ 'margin-top': '8px', 'font-size': '0.8rem', 'font-family': font.sans, color: colors.rust }}>
+                  {attachError()}
+                </div>
+              </Show>
+            </div>
+
+            <div style={{ display: 'flex', gap: '22px', flex: 1, 'min-height': '0' }}>
+              <div style={{ width: '220px', 'flex-shrink': 0, display: 'flex', 'flex-direction': 'column', gap: '4px' }}>
+                <For each={props.activeTicketAttachments()}>
+                  {attachment => (
+                    <div
+                      onClick={() => selectAttachment(attachment)}
+                      style={{
+                        display: 'flex',
+                        'justify-content': 'space-between',
+                        'align-items': 'center',
+                        gap: '6px',
+                        padding: '8px 10px',
+                        'border-radius': '6px',
+                        cursor: 'pointer',
+                        background: selectedAttachment()?.fileName === attachment.fileName ? colors.blueTint : 'transparent'
+                      }}
+                    >
+                      <span
+                        style={{
+                          overflow: 'hidden',
+                          'text-overflow': 'ellipsis',
+                          'white-space': 'nowrap',
+                          'font-family': font.sans,
+                          'font-size': '0.85rem',
+                          color: colors.ink
+                        }}
+                      >
+                        {attachment.name}
+                      </span>
+                      <span style={{ display: 'flex', 'align-items': 'center', gap: '6px', 'flex-shrink': 0 }}>
+                        <span style={{ 'font-size': '0.68rem', 'font-family': font.mono, color: colors.inkFaint }}>
+                          .{attachment.ext}
+                        </span>
+                        <button
+                          onClick={e => {
+                            e.stopPropagation();
+                            if (selectedAttachment()?.fileName === attachment.fileName) setSelectedAttachment(null);
+                            props.onDeleteAttachment(attachment);
+                          }}
+                          style={{ display: 'flex', background: 'transparent', color: colors.inkFaint, border: 'none', cursor: 'pointer', padding: 0 }}
+                          onMouseEnter={e => (e.currentTarget.style.color = colors.rust)}
+                          onMouseLeave={e => (e.currentTarget.style.color = colors.inkFaint)}
+                        >
+                          <Icon name="trash" size={12} />
+                        </button>
+                      </span>
+                    </div>
+                  )}
+                </For>
+                <Show when={props.activeTicketAttachments().length === 0}>
+                  <div style={{ color: colors.inkFaint, 'font-size': '0.82rem', 'font-family': font.sans }}>No attachments yet.</div>
+                </Show>
+              </div>
+
+              <div style={{ flex: 1, 'min-width': '0', 'overflow-y': 'auto' }}>
+                <Show
+                  when={selectedAttachment()}
+                  fallback={<div style={{ color: colors.inkFaint, 'font-size': '0.85rem', 'font-family': font.sans }}>Select an attachment to view it.</div>}
+                >
+                  {attachment => (
+                    <Switch>
+                      <Match when={IMAGE_EXTENSIONS.includes(attachment().ext)}>
+                        <img
+                          src={`/api/attachment/raw?path=${encodeURIComponent(attachment().filePath)}`}
+                          style={{ 'max-width': '100%', 'border-radius': '6px' }}
+                        />
+                      </Match>
+                      <Match when={attachment().ext === 'md' || attachment().ext === 'html'}>
+                        <div style={{ display: 'flex', 'justify-content': 'space-between', 'align-items': 'center', 'margin-bottom': '10px' }}>
+                          <span style={{ 'font-size': '0.78rem', 'font-family': font.sans, color: attachmentSaveStatus().startsWith('Error') ? colors.rust : colors.patina }}>
+                            {attachmentSaveStatus()}
+                          </span>
+                          <Show
+                            when={isEditingAttachment()}
+                            fallback={
+                              <button
+                                onClick={startEditAttachment}
+                                style={{
+                                  display: 'flex',
+                                  'align-items': 'center',
+                                  gap: '6px',
+                                  background: 'transparent',
+                                  color: colors.inkSoft,
+                                  border: `1px solid ${colors.border}`,
+                                  padding: '6px 12px',
+                                  'border-radius': '7px',
+                                  cursor: 'pointer',
+                                  'font-family': font.sans,
+                                  'font-weight': 600,
+                                  'font-size': '0.8rem'
+                                }}
+                              >
+                                <Icon name="pencil" size={12} /> Edit
+                              </button>
+                            }
+                          >
+                            <span style={{ display: 'flex', gap: '8px' }}>
+                              <button
+                                onClick={backToAttachmentPreview}
+                                style={{
+                                  display: 'flex',
+                                  'align-items': 'center',
+                                  gap: '6px',
+                                  background: 'transparent',
+                                  color: colors.inkSoft,
+                                  border: `1px solid ${colors.border}`,
+                                  padding: '6px 12px',
+                                  'border-radius': '7px',
+                                  cursor: 'pointer',
+                                  'font-family': font.sans,
+                                  'font-weight': 600,
+                                  'font-size': '0.8rem'
+                                }}
+                              >
+                                <Icon name="eye" size={12} /> Back to preview
+                              </button>
+                              <button
+                                onClick={handleSaveAttachment}
+                                style={{
+                                  background: colors.blue,
+                                  color: colors.paperCard,
+                                  border: 'none',
+                                  padding: '7px 16px',
+                                  'border-radius': '7px',
+                                  cursor: 'pointer',
+                                  'font-family': font.sans,
+                                  'font-weight': 600,
+                                  'font-size': '0.8rem'
+                                }}
+                              >
+                                Save
+                              </button>
+                            </span>
+                          </Show>
+                        </div>
+
+                        <Show
+                          when={!isEditingAttachment()}
+                          fallback={
+                            <textarea
+                              value={attachmentEditBuffer()}
+                              onInput={e => setAttachmentEditBuffer(e.currentTarget.value)}
+                              style={{
+                                width: '100%',
+                                'min-height': '420px',
+                                padding: '14px',
+                                'font-family': font.mono,
+                                border: `1px solid ${colors.border}`,
+                                'border-radius': '9px',
+                                'font-size': '0.9rem',
+                                'line-height': '1.55',
+                                color: colors.ink,
+                                background: colors.paperCard,
+                                outline: 'none'
+                              }}
+                            />
+                          }
+                        >
+                          <Show
+                            when={attachment().ext === 'html'}
+                            fallback={
+                              <div
+                                class="md-preview"
+                                innerHTML={marked.parse(attachmentContent() || '') as string}
+                                style={{ 'line-height': '1.65', color: colors.ink, 'font-family': font.sans, 'font-size': '1rem' }}
+                              />
+                            }
+                          >
+                            {/* No allow-scripts - a wireframe attachment renders its markup/CSS but can't run JS
+                                against the app's own origin. */}
+                            <iframe
+                              sandbox="allow-same-origin"
+                              srcdoc={attachmentContent()}
+                              style={{ width: '100%', height: '520px', border: `1px solid ${colors.border}`, 'border-radius': '6px', background: '#fff' }}
+                            />
+                          </Show>
+                        </Show>
+                      </Match>
+                    </Switch>
+                  )}
+                </Show>
+              </div>
             </div>
           </div>
         </Show>

@@ -223,6 +223,14 @@
         "type": "",
         "assignee": "",
         "fileName": "vq9ss-add-reset-filters-to-sidebar-and-show-helper-if-no-results-due-to-filtering.md"
+      },
+      {
+        "id": "fsphh",
+        "name": "Support file attachments to tickets",
+        "status": "reviewing",
+        "type": "feature",
+        "assignee": "",
+        "fileName": "fsphh-support-file-attachments-to-tickets.md"
       }
     ],
     "subprojects": []
