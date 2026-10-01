@@ -76,7 +76,7 @@ interface PersistedProjectManifest {
 // Intentionally in-memory only (not persisted into _project.json) so the file stays
 // portable - resets on dev-server restart, which is fine since re-scanning a project's
 // ticket files is cheap at this tool's scale.
-const ticketCache = new Map<string, { mtime: number; summary: TicketSummary }>();
+const ticketCache = new Map<string, { mtime: number; size: number; summary: TicketSummary }>();
 const subManifestCache = new Map<string, { mtime: number; name: string }>();
 
 // Trued-up manifests computed by the passive file watcher that differ from what's on
@@ -483,7 +483,7 @@ export function loadOrTrueUpProject(
       const cached = ticketCache.get(filePath);
       let ticketSummary: TicketSummary;
 
-      if (cached && cached.mtime === stat.mtimeMs) {
+      if (cached && cached.mtime === stat.mtimeMs && cached.size === stat.size) {
         ticketSummary = cached.summary;
       } else {
         const raw = fs.readFileSync(filePath, 'utf-8');
@@ -507,7 +507,7 @@ export function loadOrTrueUpProject(
           filePath,
           attachments: [] // overwritten below on every scan - see note above
         };
-        ticketCache.set(filePath, { mtime: stat.mtimeMs, summary: ticketSummary });
+        ticketCache.set(filePath, { mtime: stat.mtimeMs, size: stat.size, summary: ticketSummary });
       }
 
       // Attachments are recomputed fresh on every scan, cache hit or not - the ticket
@@ -584,49 +584,11 @@ export function loadOrTrueUpProject(
   return finalManifest;
 }
 
-export function syncTicketToManifest(
-  ticketFilePath: string,
-  attributes: Record<string, any>
-): void {
-  const projectDir = path.dirname(ticketFilePath);
-  const fileName = path.basename(ticketFilePath);
-  const manifest = readRawProjectManifest(projectDir);
-  if (!manifest) return;
-
-  // `attributes` is always the ticket's complete current attribute set, so a field the
-  // user just cleared to blank arrives as ''. Falling back to the old value with `||`
-  // would make clearing a field impossible to persist - a presence check distinguishes
-  // "field is set to blank" from "field is absent from this save" instead.
-  const hasOwn = (key: string) => Object.prototype.hasOwnProperty.call(attributes, key);
-
-  let found = false;
-  manifest.projectmap.tickets = (manifest.projectmap.tickets || []).map(ticket => {
-    if (ticket.fileName === fileName || ticket.filePath === ticketFilePath) {
-      found = true;
-      return {
-        ...ticket,
-        id: attributes.id || ticket.id,
-        name: attributes.name || ticket.name,
-        status: hasOwn('status') ? attributes.status || '' : ticket.status,
-        type: hasOwn('type') ? attributes.type || undefined : ticket.type,
-        assignee: hasOwn('assignee') ? attributes.assignee || undefined : ticket.assignee
-      };
-    }
-    return ticket;
-  });
-
-  if (!found) {
-    manifest.projectmap.tickets.push({
-      id: attributes.id || fileName.replace(/\.md$/i, ''),
-      name: attributes.name || fileName,
-      status: attributes.status || 'idea',
-      type: attributes.type || undefined,
-      assignee: attributes.assignee || undefined,
-      fileName,
-      filePath: ticketFilePath,
-      attachments: []
-    });
-  }
-
-  saveProjectManifest(projectDir, manifest);
+// Called after the app itself writes a ticket file. Re-deriving through the same scan the
+// file watcher uses keeps _project.json identical to what a passive true-up would compute,
+// so an in-app edit can never register as an "external change". Directories with no
+// manifest (docs) are left alone.
+export function trueUpAfterWrite(filePath: string): void {
+  const dir = path.dirname(filePath);
+  if (fs.existsSync(getProjectManifestPath(dir))) loadOrTrueUpProject(dir);
 }

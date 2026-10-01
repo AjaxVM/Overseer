@@ -70,6 +70,8 @@ export default function App() {
   const [createErrorMsg, setCreateErrorMsg] = createSignal('');
   const [createFieldValues, setCreateFieldValues] = createSignal<Record<string, string>>({});
 
+  const createRepoName = () => tree().find(r => r.repoPath === createRepoPath())?.name;
+  const configRepoName = () => tree().find(r => r.repoPath === configRepoPath())?.name;
   const createSchema = () => tree().find(r => r.repoPath === createRepoPath())?.config?.frontmatterSchema || [];
   const setCreateFieldValue = (name: string, value: string) => setCreateFieldValues(prev => ({ ...prev, [name]: value }));
 
@@ -143,17 +145,27 @@ export default function App() {
     pushNavUrl();
   };
 
+  const fetchProject = async (projectPath: string): Promise<ProjectDetailsResponse> => {
+    const res = await fetch(`/api/project?path=${encodeURIComponent(projectPath)}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to load project');
+    return data;
+  };
+
+  // Navigation: only the latest call may apply its result, and activeProjectPath moves
+  // immediately so any in-flight refreshProject for the previous project discards itself.
+  let navSeq = 0;
   const loadProject = async (projectPath: string, repoPath?: string, autoOpenOverview = false) => {
+    const seq = ++navSeq;
+    setActiveProjectPath(projectPath);
     try {
-      const res = await fetch(`/api/project?path=${encodeURIComponent(projectPath)}`);
-      const data: ProjectDetailsResponse = await res.json();
-      if (!res.ok) throw new Error((data as any).error || 'Failed to load project');
+      const data = await fetchProject(projectPath);
+      if (seq !== navSeq) return;
 
       setProjectData(data);
-      setActiveProjectPath(projectPath);
       localStorage.setItem('overseer:activeProject', projectPath);
 
-      const rPath = repoPath || data.repoPath;
+      const rPath = data.repoPath || repoPath;
       if (rPath) {
         setActiveRepoPath(rPath);
         localStorage.setItem('overseer:activeRepo', rPath);
@@ -169,7 +181,20 @@ export default function App() {
     }
   };
 
-  // Shared by the initial load (fetchTree) and browser back/forward (handlePopState) -
+  // Background re-read of the open project (after a save, a watcher event, etc). Never
+  // navigates, and drops its result if the user has moved to another project meanwhile.
+  const refreshProject = async () => {
+    const projectPath = activeProjectPath();
+    if (!projectPath) return;
+    try {
+      const data = await fetchProject(projectPath);
+      if (activeProjectPath() === projectPath) setProjectData(data);
+    } catch (err: any) {
+      console.error('Failed to refresh project:', err);
+    }
+  };
+
+  // Shared by the initial load and browser back/forward (handlePopState) -
   // the URL (poc-12) wins over localStorage when both are present, which is what makes a
   // link to a specific ticket/project/doc shareable and refresh-proof. localStorage
   // remains the fallback for a bare visit with no URL params at all.
@@ -243,12 +268,13 @@ export default function App() {
     }
   };
 
-  const fetchTree = async () => {
+  // Only refreshes the sidebar tree - never navigates. Restoring location from the URL
+  // happens once on startup and on back/forward (see applyLocationState), since doing it
+  // on every refresh raced with whatever navigation the user had just triggered.
+  const refreshTree = async () => {
     try {
       const res = await fetch('/api/projects');
-      const data: RepoTreeNode[] = await res.json();
-      setTree(data);
-      await applyLocationState(data);
+      setTree(await res.json());
     } catch (e) {
       console.error('Failed to fetch tree:', e);
     }
@@ -262,15 +288,14 @@ export default function App() {
   };
 
   createEffect(() => {
-    fetchTree();
+    refreshTree().then(() => applyLocationState(tree()));
     if (import.meta.hot) {
       import.meta.hot.on('projects-update', () => {
-        fetchTree();
-        // fetchTree only refreshes the sidebar tree - the open project's own manifest
-        // (and its pendingSync flag, see handleSyncProject) needs its own refetch, or a
-        // background true-up would never show up until the user navigates away and back.
-        const openProjectPath = activeProjectPath();
-        if (openProjectPath) loadProject(openProjectPath, activeRepoPath() || undefined);
+        refreshTree();
+        // The open project's own manifest (and its pendingSync flag, see handleSyncProject)
+        // needs its own refetch, or a background true-up would never show up until the
+        // user navigates away and back.
+        refreshProject();
       });
     }
   });
@@ -355,9 +380,7 @@ export default function App() {
       setOriginalAttributes(attributes());
       setOriginalMarkdownBody(markdownBody());
 
-      if (activeProjectPath()) {
-        loadProject(activeProjectPath()!, activeRepoPath() || undefined);
-      }
+      refreshProject();
     } catch (err: any) {
       setSaveStatus(`Error: ${err.message}`);
     } finally {
@@ -413,8 +436,8 @@ export default function App() {
     try {
       await deleteItem(ticket.filePath, 'file', parentPath);
       if (activeFilePath() === ticket.filePath) clearWorkspace();
-      loadProject(parentPath, activeRepoPath() || undefined);
-      fetchTree();
+      refreshProject();
+      refreshTree();
     } catch (err: any) {
       alert(err.message);
     }
@@ -431,9 +454,9 @@ export default function App() {
       if (activeProjectPath() === sub.path || isPathUnder(activeProjectPath(), sub.path)) {
         loadProject(parentPath, activeRepoPath() || undefined, true);
       } else {
-        loadProject(parentPath, activeRepoPath() || undefined);
+        refreshProject();
       }
-      fetchTree();
+      refreshTree();
     } catch (err: any) {
       alert(err.message);
     }
@@ -450,7 +473,7 @@ export default function App() {
   };
 
   // Stays live for free: any attachment mutation broadcasts projects-update, which the
-  // WS listener below already turns into a loadProject() refresh.
+  // WS listener below already turns into a refreshProject().
   const activeTicketAttachments = () => {
     const filePath = activeFilePath();
     if (!filePath) return [];
@@ -474,7 +497,7 @@ export default function App() {
       });
       const data = await res.json();
       if (!res.ok) return { success: false, error: data.error || 'Failed to attach file' };
-      await loadProject(parentPath, activeRepoPath() || undefined);
+      await refreshProject();
       return { success: true, fileName: data.fileName };
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -493,7 +516,7 @@ export default function App() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to delete attachment');
-      loadProject(parentPath, activeRepoPath() || undefined);
+      refreshProject();
     } catch (err: any) {
       alert(err.message);
     }
@@ -512,7 +535,7 @@ export default function App() {
         await deleteItem(projPath, 'directory', parentPath);
         clearWorkspace();
         loadProject(parentPath, activeRepoPath() || undefined, true);
-        fetchTree();
+        refreshTree();
       } catch (err: any) {
         alert(err.message);
       }
@@ -522,8 +545,8 @@ export default function App() {
       try {
         await deleteItem(filePath, 'file', parentPath);
         clearWorkspace();
-        if (activeProjectPath()) loadProject(activeProjectPath()!, activeRepoPath() || undefined);
-        fetchTree();
+        refreshProject();
+        refreshTree();
       } catch (err: any) {
         alert(err.message);
       }
@@ -539,7 +562,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectPath: pPath, ...body })
       });
-      loadProject(pPath, activeRepoPath() || undefined);
+      refreshProject();
     } catch (err: any) {
       console.error('Failed to reorder project:', err);
     }
@@ -557,8 +580,8 @@ export default function App() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to rename project');
-      loadProject(projectPath, activeRepoPath() || undefined);
-      fetchTree();
+      refreshProject();
+      refreshTree();
     } catch (err: any) {
       alert(err.message);
     }
@@ -575,8 +598,8 @@ export default function App() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to sync project');
-      loadProject(projectPath, activeRepoPath() || undefined);
-      fetchTree();
+      refreshProject();
+      refreshTree();
     } catch (err: any) {
       alert(err.message);
     }
@@ -619,11 +642,7 @@ export default function App() {
       if (!res.ok) throw new Error(data.error || 'Failed to create item');
 
       setIsCreateModalOpen(false);
-      fetchTree();
-
-      if (activeProjectPath()) {
-        await loadProject(activeProjectPath()!, activeRepoPath() || undefined);
-      }
+      await Promise.all([refreshTree(), refreshProject()]);
 
       if (createType() === 'file') {
         handleOpenFile(data.createdPath, createRepoPath());
@@ -679,7 +698,7 @@ export default function App() {
       });
       if (!res.ok) throw new Error('Failed to save config');
       setIsConfigModalOpen(false);
-      fetchTree();
+      refreshTree();
     } catch (err: any) {
       alert(err.message);
     }
@@ -699,7 +718,7 @@ export default function App() {
 
       setSelectedRepoPath('');
       setIsModalOpen(false);
-      fetchTree();
+      refreshTree();
     } catch (err: any) {
       setErrorMsg(err.message);
     }
@@ -767,6 +786,7 @@ export default function App() {
         createName={createName}
         setCreateName={setCreateName}
         createParentPath={createParentPath}
+        repoName={createRepoName}
         createErrorMsg={createErrorMsg}
         schema={createSchema}
         fieldValues={createFieldValues}
@@ -777,6 +797,7 @@ export default function App() {
       <RepoConfigModal
         isOpen={isConfigModalOpen}
         onClose={() => setIsConfigModalOpen(false)}
+        repoName={configRepoName}
         configDocsDir={configDocsDir}
         setConfigDocsDir={setConfigDocsDir}
         configProjectsDir={configProjectsDir}

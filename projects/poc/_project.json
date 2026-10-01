@@ -14,7 +14,7 @@
       {
         "id": "vq9ss",
         "name": "Add reset filters to sidebar, and show helper if no results due to filtering",
-        "status": "idea",
+        "status": "done",
         "type": "",
         "assignee": "",
         "fileName": "vq9ss-add-reset-filters-to-sidebar-and-show-helper-if-no-results-due-to-filtering.md"
@@ -61,7 +61,7 @@
       {
         "id": "xnn77",
         "name": "Creating a ticket should navigate to that ticket edit page",
-        "status": "idea",
+        "status": "done",
         "type": "",
         "assignee": "",
         "fileName": "xnn77-creating-a-ticket-should-navigate-to-that-ticket-edit-page.md"
@@ -110,7 +110,7 @@
       {
         "id": "am7dd",
         "name": "Show which app you are adding to in the create modal and edit repo modal",
-        "status": "idea",
+        "status": "done",
         "type": "bug",
         "fileName": "am7dd-show-which-app-you-are-adding-to-in-the-create-modal-and-edit-repo-modal.md"
       },
@@ -124,7 +124,7 @@
       {
         "id": "poc-6",
         "name": "Add a field quick links weird",
-        "status": "idea",
+        "status": "done",
         "fileName": "6-add-a-field-quick-links-weird.md"
       },
       {
@@ -158,12 +158,6 @@
         "name": "Support moving tickets between projects",
         "status": "idea",
         "fileName": "9-support-moving-tickets-between-projects.md"
-      },
-      {
-        "id": "poc-10",
-        "name": "Default closed on the projects",
-        "status": "idea",
-        "fileName": "10-default-closed-on-the-projects.md"
       },
       {
         "id": "poc-11",
@@ -201,7 +195,7 @@
       {
         "id": "pqf24",
         "name": "Issue when switching repos sometimes",
-        "status": "idea",
+        "status": "done",
         "type": "bug",
         "assignee": "",
         "fileName": "pqf24-issue-when-switching-repos-sometimes.md"
@@ -230,7 +224,7 @@
       {
         "id": "poc-19",
         "name": "Some buttons (ie create modal) don't show a hand/pointer on hover",
-        "status": "idea",
+        "status": "done",
         "type": "bug",
         "fileName": "19-some-buttons-ie-create-modal-don-t-show-a-hand-pointer-on-hover.md"
       },
@@ -263,6 +257,12 @@
         "status": "idea",
         "type": "feature",
         "fileName": "qk7pf-track-assignee-history-per-status-transition.md"
+      },
+      {
+        "id": "f4yqr",
+        "name": "test",
+        "status": "idea",
+        "fileName": "f4yqr-test.md"
       }
     ],
     "subprojects": []

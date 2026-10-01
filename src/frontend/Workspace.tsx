@@ -300,6 +300,14 @@ export default function Workspace(props: WorkspaceProps) {
     props.onSave();
   };
 
+  const missingSchemaFields = () => {
+    const present = new Set(props.attributes().map(a => a.key.trim().toLowerCase()));
+    return (getActiveRepoConfig()?.frontmatterSchema || []).filter((f: SchemaField) => {
+      const key = f.name.trim().toLowerCase();
+      return key !== 'id' && key !== 'name' && !present.has(key);
+    });
+  };
+
   const nonBuiltInAttributes = () =>
     props.attributes().filter(a => !['id', 'status', 'type', 'assignee'].includes(a.key.trim().toLowerCase()));
 
@@ -751,6 +759,7 @@ export default function Workspace(props: WorkspaceProps) {
                   {(attr, index) => {
                     const schema = getActiveRepoConfig()?.frontmatterSchema || [];
                     const fieldDef = schema.find((s: SchemaField) => s.name === attr().key.trim());
+                    const isLocked = () => ['id', 'name'].includes(attr().key.trim().toLowerCase());
 
                     return (
                       <div
@@ -765,6 +774,7 @@ export default function Workspace(props: WorkspaceProps) {
                           type="text"
                           placeholder="Key"
                           value={attr().key}
+                          readOnly={isLocked()}
                           onInput={e => updateAttrKey(index, e.currentTarget.value)}
                           style={{
                             width: '150px',
@@ -833,7 +843,8 @@ export default function Workspace(props: WorkspaceProps) {
                               'font-family': font.sans,
                               'font-size': '0.85rem',
                               color: colors.ink,
-                              background: colors.paperCard
+                              background: colors.paperCard,
+                              cursor: 'pointer'
                             }}
                           >
                             <option value="">Select {fieldDef?.name}</option>
@@ -841,28 +852,30 @@ export default function Workspace(props: WorkspaceProps) {
                           </select>
                         </Show>
 
-                        <button
-                          onClick={() => handleRemoveFrontmatterField(index)}
-                          style={{
-                            display: 'flex',
-                            'align-items': 'center',
-                            background: 'transparent',
-                            color: colors.inkFaint,
-                            border: 'none',
-                            padding: '0 6px',
-                            cursor: 'pointer'
-                          }}
-                          onMouseEnter={e => (e.currentTarget.style.color = colors.rust)}
-                          onMouseLeave={e => (e.currentTarget.style.color = colors.inkFaint)}
-                        >
-                          <Icon name="x" size={15} />
-                        </button>
+                        <Show when={!isLocked()} fallback={<span style={{ width: '27px', 'flex-shrink': 0 }} />}>
+                          <button
+                            onClick={() => handleRemoveFrontmatterField(index)}
+                            style={{
+                              display: 'flex',
+                              'align-items': 'center',
+                              background: 'transparent',
+                              color: colors.inkFaint,
+                              border: 'none',
+                              padding: '0 6px',
+                              cursor: 'pointer'
+                            }}
+                            onMouseEnter={e => (e.currentTarget.style.color = colors.rust)}
+                            onMouseLeave={e => (e.currentTarget.style.color = colors.inkFaint)}
+                          >
+                            <Icon name="x" size={15} />
+                          </button>
+                        </Show>
                       </div>
                     );
                   }}
                 </Index>
 
-                <Show when={(getActiveRepoConfig()?.frontmatterSchema || []).length > 0}>
+                <Show when={missingSchemaFields().length > 0}>
                   <div
                     style={{
                       'margin-top': '12px',
@@ -875,7 +888,7 @@ export default function Workspace(props: WorkspaceProps) {
                     }}
                   >
                     <span style={{ 'font-size': '0.74rem', color: colors.inkFaint, 'font-family': font.sans }}>Add field:</span>
-                    <For each={getActiveRepoConfig()?.frontmatterSchema || []}>
+                    <For each={missingSchemaFields()}>
                       {(schemaField: SchemaField) => (
                         <button
                           onClick={() => handleAddFrontmatterField(schemaField.name)}

@@ -10,7 +10,7 @@ import {
   generateShortId,
   isAttachmentFileName,
   stringifyFrontmatter,
-  syncTicketToManifest,
+  trueUpAfterWrite,
   reorderByKeys,
   getPendingManifest,
   commitPendingManifest
@@ -422,7 +422,8 @@ export function handlePostItemCreate(ctx: RouteContext, req: any, res: any) {
         (repoConfig.frontmatterSchema || []).forEach((field: any) => {
           if (field.name === 'id') return;
           if (field.name === 'name') return;
-          initialAttributes[field.name] = attributes?.[field.name] ?? '';
+          const value = attributes?.[field.name];
+          if (value) initialAttributes[field.name] = value;
         });
 
         const initialBody = `# ${name.trim()}\n\nWrite details or specifications here...`;
@@ -430,8 +431,7 @@ export function handlePostItemCreate(ctx: RouteContext, req: any, res: any) {
 
         fs.writeFileSync(newFilePath, fileContent, 'utf-8');
 
-        // Update manifest in parent project
-        syncTicketToManifest(newFilePath, initialAttributes);
+        trueUpAfterWrite(newFilePath);
 
         ctx.server.ws.send({ type: 'custom', event: 'projects-update' });
         res.setHeader('Content-Type', 'application/json');

@@ -1,7 +1,7 @@
 ---
 id: poc-19
 name: Some buttons (ie create modal) don't show a hand/pointer on hover
-status: idea
+status: done
 type: bug
 estimate: tiny
 complexity: simple

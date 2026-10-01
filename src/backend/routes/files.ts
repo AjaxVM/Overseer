@@ -1,5 +1,5 @@
 import fs from 'fs';
-import { parseFrontmatter, stringifyFrontmatter, syncTicketToManifest, writePreservingEol } from '../manifest';
+import { parseFrontmatter, stringifyFrontmatter, trueUpAfterWrite, writePreservingEol } from '../manifest';
 
 export function handleGetFileRead(req: any, res: any) {
   const urlObj = new URL(req.url, 'http://localhost');
@@ -26,10 +26,7 @@ export function handlePostFileSave(req: any, res: any) {
       const fileContent = stringifyFrontmatter(attributes, body);
       writePreservingEol(filePath, fileContent);
 
-      // Sync ticket to project manifest!
-      if (filePath.toLowerCase().endsWith('.md')) {
-        syncTicketToManifest(filePath, attributes);
-      }
+      if (filePath.toLowerCase().endsWith('.md')) trueUpAfterWrite(filePath);
 
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ success: true }));

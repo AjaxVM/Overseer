@@ -1,7 +1,7 @@
 ---
 id: xnn77
 name: Creating a ticket should navigate to that ticket edit page
-status: 
+status: done
 type: 
 estimate: 
 complexity: 

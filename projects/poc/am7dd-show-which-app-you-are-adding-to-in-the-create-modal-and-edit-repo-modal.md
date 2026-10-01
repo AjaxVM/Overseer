@@ -1,7 +1,7 @@
 ---
 id: am7dd
 name: Show which app you are adding to in the create modal and edit repo modal
-status: idea
+status: done
 type: bug
 estimate: tiny
 complexity: simple

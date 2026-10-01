@@ -1,7 +1,7 @@
 ---
 id: pqf24
 name: Issue when switching repos sometimes
-status: 
+status: done
 type: bug
 estimate: 
 complexity: 

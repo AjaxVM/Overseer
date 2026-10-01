@@ -68,6 +68,8 @@ function primaryButtonStyle(disabled?: boolean): JSX.CSSProperties {
   };
 }
 
+const selectStyle: JSX.CSSProperties = { ...inputStyle, cursor: 'pointer' };
+
 const secondaryButtonStyle: JSX.CSSProperties = {
   background: 'transparent',
   color: colors.inkSoft,
@@ -339,6 +341,7 @@ interface CreateItemModalProps {
   createName: Accessor<string>;
   setCreateName: Setter<string>;
   createParentPath: Accessor<string>;
+  repoName: Accessor<string | undefined>;
   createErrorMsg: Accessor<string>;
   schema: Accessor<SchemaField[]>;
   fieldValues: Accessor<Record<string, string>>;
@@ -390,7 +393,7 @@ export function CreateItemModal(props: CreateItemModalProps) {
   return (
     <Show when={props.isOpen()}>
       <ModalOverlay width="480px" onClose={confirmClose}>
-        <ModalTitle>Create ticket or sub-project</ModalTitle>
+        <ModalTitle>Create ticket or sub-project in <em>{props.repoName()}</em></ModalTitle>
         <form onSubmit={props.onSubmit}>
           <div style={{ 'margin-bottom': '14px' }}>
             <label style={labelStyle}>Item type</label>
@@ -473,7 +476,7 @@ export function CreateItemModal(props: CreateItemModalProps) {
                           <select
                             value={props.fieldValues()[field.name] || ''}
                             onChange={e => props.setFieldValue(field.name, e.currentTarget.value)}
-                            style={inputStyle}
+                            style={selectStyle}
                           >
                             <option value="">—</option>
                             <For each={field.options || []}>{opt => <option value={opt}>{opt}</option>}</For>
@@ -733,6 +736,7 @@ function EnumColorEditor(props: EnumColorEditorProps) {
 interface RepoConfigModalProps {
   isOpen: Accessor<boolean>;
   onClose: () => void;
+  repoName: Accessor<string | undefined>;
   configDocsDir: Accessor<string>;
   setConfigDocsDir: Setter<string>;
   configProjectsDir: Accessor<string>;
@@ -785,7 +789,7 @@ export function RepoConfigModal(props: RepoConfigModalProps) {
   return (
     <Show when={props.isOpen()}>
       <ModalOverlay width="580px" maxHeight="85vh" onClose={confirmClose}>
-        <ModalTitle>Repository settings</ModalTitle>
+        <ModalTitle>Repository settings: <em>{props.repoName()}</em></ModalTitle>
         <form onSubmit={props.onSubmit}>
           <div style={{ display: 'flex', gap: '12px', 'margin-bottom': '18px' }}>
             <div style={{ flex: 1 }}>
