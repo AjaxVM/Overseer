@@ -375,7 +375,18 @@ function MoreFiltersPopover(props: { hasActive: boolean; children: JSX.Element }
   );
 }
 
+const DEFAULT_WIDTH = 340;
+const MIN_WIDTH = 280;
+const MAX_WIDTH = 640;
+const clampWidth = (w: number) => Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, w));
+
 export default function Sidebar(props: SidebarProps) {
+  // Resizable width (poc/dkkrt). Written to localStorage once per drag, on release.
+  const [width, setWidth] = createSignal(clampWidth(Number(localStorage.getItem('overseer:sidebarWidth')) || DEFAULT_WIDTH));
+  const [isResizing, setIsResizing] = createSignal(false);
+  const [isHandleHovered, setIsHandleHovered] = createSignal(false);
+  const persistWidth = () => localStorage.setItem('overseer:sidebarWidth', String(width()));
+
   const [isSubprojectsOpen, setIsSubprojectsOpen] = createSignal(localStorage.getItem('overseer:panel:subprojects') !== 'false');
   const [isTicketsOpen, setIsTicketsOpen] = createSignal(localStorage.getItem('overseer:panel:tickets') !== 'false');
   const [isDocsOpen, setIsDocsOpen] = createSignal(localStorage.getItem('overseer:panel:docs') !== 'false');
@@ -592,13 +603,15 @@ export default function Sidebar(props: SidebarProps) {
   return (
     <div
       style={{
-        width: '340px',
+        width: `${width()}px`,
         'border-right': `1px solid ${colors.border}`,
         background: colors.paperDim,
         display: 'flex',
         'flex-direction': 'column',
         height: '100vh',
-        'min-width': '280px',
+        position: 'relative',
+        'flex-shrink': 0,
+        'user-select': isResizing() ? 'none' : undefined,
         overflow: 'hidden'
       }}
     >
@@ -1142,6 +1155,37 @@ export default function Sidebar(props: SidebarProps) {
           </div>
         </Show>
       </div>
+
+      {/* Resize handle - inside the root because its overflow: hidden would clip anything outside */}
+      <div
+        title="Drag to resize, double-click to reset"
+        onPointerDown={e => {
+          e.currentTarget.setPointerCapture(e.pointerId);
+          setIsResizing(true);
+        }}
+        onPointerMove={e => {
+          if (isResizing()) setWidth(clampWidth(e.clientX));
+        }}
+        onPointerUp={() => {
+          setIsResizing(false);
+          persistWidth();
+        }}
+        onDblClick={() => {
+          setWidth(DEFAULT_WIDTH);
+          persistWidth();
+        }}
+        onPointerEnter={() => setIsHandleHovered(true)}
+        onPointerLeave={() => setIsHandleHovered(false)}
+        style={{
+          position: 'absolute',
+          top: 0,
+          right: 0,
+          bottom: 0,
+          width: '6px',
+          cursor: 'col-resize',
+          'border-right': `2px solid ${isResizing() || isHandleHovered() ? colors.borderStrong : 'transparent'}`
+        }}
+      />
     </div>
   );
 }

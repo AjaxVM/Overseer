@@ -1,7 +1,7 @@
 ---
 id: dkkrt
 name: Support resizing the sidebar horizontal width
-status: 
+status: done
 type: 
 estimate: 
 complexity: 
