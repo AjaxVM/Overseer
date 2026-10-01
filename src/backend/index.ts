@@ -14,6 +14,13 @@ import {
 } from './routes/projects';
 import { handleGetFileRead, handlePostFileSave } from './routes/files';
 import {
+  handleGetAttachmentRaw,
+  handleGetAttachmentRead,
+  handlePostAttachmentCreate,
+  handlePostAttachmentDelete,
+  handlePostAttachmentSave
+} from './routes/attachments';
+import {
   ensureRepoScaffold,
   handleGetFsBrowse,
   handlePostConfigSave,
@@ -95,6 +102,11 @@ export function overseer() {
           if (req.url === '/api/file/save' && req.method === 'POST') return handlePostFileSave(req, res);
           if (req.url === '/api/item/create' && req.method === 'POST') return handlePostItemCreate(ctx, req, res);
           if (req.url === '/api/item/delete' && req.method === 'POST') return handlePostItemDelete(ctx, req, res);
+          if (req.url === '/api/attachment/create' && req.method === 'POST') return handlePostAttachmentCreate(ctx, req, res);
+          if (req.url.startsWith('/api/attachment/read') && req.method === 'GET') return handleGetAttachmentRead(req, res);
+          if (req.url.startsWith('/api/attachment/raw') && req.method === 'GET') return handleGetAttachmentRaw(req, res);
+          if (req.url === '/api/attachment/save' && req.method === 'POST') return handlePostAttachmentSave(req, res);
+          if (req.url === '/api/attachment/delete' && req.method === 'POST') return handlePostAttachmentDelete(ctx, req, res);
           if (req.url === '/api/config/save' && req.method === 'POST') return handlePostConfigSave(ctx, req, res);
           if (req.url.startsWith('/api/fs/browse') && req.method === 'GET') return handleGetFsBrowse(req, res);
           if (req.url === '/api/projects/add' && req.method === 'POST') return handlePostProjectsAdd(ctx, req, res);

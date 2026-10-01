@@ -14,6 +14,14 @@ export interface SchemaField {
   optionShorthands?: Record<string, string>;
 }
 
+export interface AttachmentSummary {
+  name: string;
+  slug: string;
+  ext: string;
+  fileName: string;
+  filePath: string;
+}
+
 export interface TicketSummary {
   id: string;
   name: string;
@@ -22,6 +30,7 @@ export interface TicketSummary {
   assignee?: string;
   fileName: string;
   filePath: string;
+  attachments: AttachmentSummary[];
 }
 
 export interface SubProjectSummary {

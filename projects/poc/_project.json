@@ -4,30 +4,32 @@
   "projectmap": {
     "tickets": [
       {
-        "id": "p9j6t",
-        "name": "How to handle gitignore for project config file",
-        "status": "done",
-        "type": "bug",
-        "fileName": "p9j6t-how-to-handle-gitignore-for-project-config-file.md"
+        "id": "fb33w",
+        "name": "Ability to link to other tickets",
+        "status": "idea",
+        "type": "",
+        "assignee": "",
+        "fileName": "fb33w-ability-to-link-to-other-tickets.md"
       },
       {
-        "id": "fuzuh",
-        "name": "If only one project in a repo, auto open that on changing to that repo/startup",
-        "status": "done",
-        "type": "bug",
-        "fileName": "fuzuh-if-only-one-project-in-a-repo-auto-open-that-on-changing-to-that-repo-startup.md"
-      },
-      {
-        "id": "poc-2",
-        "name": "Fix ticket and folder name display",
-        "status": "done",
-        "fileName": "2-fix-ticket-and-folder-name-display.md"
+        "id": "vq9ss",
+        "name": "Add reset filters to sidebar, and show helper if no results due to filtering",
+        "status": "idea",
+        "type": "",
+        "assignee": "",
+        "fileName": "vq9ss-add-reset-filters-to-sidebar-and-show-helper-if-no-results-due-to-filtering.md"
       },
       {
         "id": "poc-1",
         "name": "Add type as a default frontmatter field",
         "status": "done",
         "fileName": "1-add-type-as-a-default-frontmatter-field.md"
+      },
+      {
+        "id": "poc-2",
+        "name": "Fix ticket and folder name display",
+        "status": "done",
+        "fileName": "2-fix-ticket-and-folder-name-display.md"
       },
       {
         "id": "2uxcm",
@@ -57,10 +59,60 @@
         "fileName": "4-allow-quick-edit-of-frontmatter-fields-from-preview.md"
       },
       {
+        "id": "xnn77",
+        "name": "Creating a ticket should navigate to that ticket edit page",
+        "status": "idea",
+        "type": "",
+        "assignee": "",
+        "fileName": "xnn77-creating-a-ticket-should-navigate-to-that-ticket-edit-page.md"
+      },
+      {
+        "id": "p9j6t",
+        "name": "How to handle gitignore for project config file",
+        "status": "done",
+        "type": "bug",
+        "fileName": "p9j6t-how-to-handle-gitignore-for-project-config-file.md"
+      },
+      {
+        "id": "gchtd",
+        "name": "More visible cues that a ticket is done/archived",
+        "status": "idea",
+        "type": "bug",
+        "fileName": "gchtd-more-visible-cues-that-a-ticket-is-done-archived.md"
+      },
+      {
+        "id": "eugnn",
+        "name": "Rename projects",
+        "status": "done",
+        "type": "",
+        "fileName": "eugnn-rename-projects.md"
+      },
+      {
         "id": "poc-5",
         "name": "Support assignable fields",
         "status": "idea",
         "fileName": "5-support-assignable-fields.md"
+      },
+      {
+        "id": "5t5p3",
+        "name": "Ability to delete tickets or projects",
+        "status": "done",
+        "type": "bug",
+        "fileName": "5t5p3-ability-to-delete-tickets-or-projects.md"
+      },
+      {
+        "id": "azqm9",
+        "name": "refactor app to improve maintainability",
+        "status": "idea",
+        "type": "bug",
+        "fileName": "azqm9-refactor-app-to-improve-maintainability.md"
+      },
+      {
+        "id": "am7dd",
+        "name": "Show which app you are adding to in the create modal and edit repo modal",
+        "status": "idea",
+        "type": "bug",
+        "fileName": "am7dd-show-which-app-you-are-adding-to-in-the-create-modal-and-edit-repo-modal.md"
       },
       {
         "id": "5x7e2",
@@ -70,16 +122,24 @@
         "fileName": "5x7e2-when-creating-ticket-have-an-accordion-in-the-modal-to-set-fields.md"
       },
       {
-        "id": "poc-11",
-        "name": "Some general slowness",
-        "status": "done",
-        "fileName": "11-some-general-slowness.md"
-      },
-      {
         "id": "poc-6",
         "name": "Add a field quick links weird",
         "status": "idea",
         "fileName": "6-add-a-field-quick-links-weird.md"
+      },
+      {
+        "id": "byvj8",
+        "name": "Add quick edit of ticket name",
+        "status": "done",
+        "type": "bug",
+        "fileName": "byvj8-add-quick-edit-of-ticket-name.md"
+      },
+      {
+        "id": "wfjmd",
+        "name": "Support more filtering - specifically type/status",
+        "status": "done",
+        "type": "bug",
+        "fileName": "wfjmd-support-more-filtering-specifically-type-status.md"
       },
       {
         "id": "poc-7",
@@ -94,13 +154,6 @@
         "fileName": "8-edit-header-improvements.md"
       },
       {
-        "id": "eugnn",
-        "name": "Rename projects",
-        "status": "done",
-        "type": "",
-        "fileName": "eugnn-rename-projects.md"
-      },
-      {
         "id": "poc-9",
         "name": "Support moving tickets between projects",
         "status": "idea",
@@ -111,6 +164,12 @@
         "name": "Default closed on the projects",
         "status": "idea",
         "fileName": "10-default-closed-on-the-projects.md"
+      },
+      {
+        "id": "poc-11",
+        "name": "Some general slowness",
+        "status": "done",
+        "fileName": "11-some-general-slowness.md"
       },
       {
         "id": "poc-12",
@@ -133,6 +192,21 @@
         "fileName": "15-change-how-we-index-projects.md"
       },
       {
+        "id": "fuzuh",
+        "name": "If only one project in a repo, auto open that on changing to that repo/startup",
+        "status": "done",
+        "type": "bug",
+        "fileName": "fuzuh-if-only-one-project-in-a-repo-auto-open-that-on-changing-to-that-repo-startup.md"
+      },
+      {
+        "id": "pqf24",
+        "name": "Issue when switching repos sometimes",
+        "status": "idea",
+        "type": "bug",
+        "assignee": "",
+        "fileName": "pqf24-issue-when-switching-repos-sometimes.md"
+      },
+      {
         "id": "poc-16",
         "name": "Support archiving tickets/projects.",
         "status": "idea",
@@ -147,11 +221,11 @@
         "fileName": "17-pre-commit-hook-to-true-up-edited-tickets.md"
       },
       {
-        "id": "wfjmd",
-        "name": "Support more filtering - specifically type/status",
+        "id": "dz55s",
+        "name": "Save filters in localStorage and persist on navigating projects/repos",
         "status": "done",
-        "type": "bug",
-        "fileName": "wfjmd-support-more-filtering-specifically-type-status.md"
+        "type": "",
+        "fileName": "dz55s-save-filters-in-localstorage-and-persist-on-navigating-projects-repos.md"
       },
       {
         "id": "poc-19",
@@ -161,92 +235,19 @@
         "fileName": "19-some-buttons-ie-create-modal-don-t-show-a-hand-pointer-on-hover.md"
       },
       {
+        "id": "fsphh",
+        "name": "Support file attachments to tickets",
+        "status": "done",
+        "type": "feature",
+        "assignee": "",
+        "fileName": "fsphh-support-file-attachments-to-tickets.md"
+      },
+      {
         "id": "mxskv",
         "name": "Support reordering tickets - drag and drop",
         "status": "done",
         "type": "bug",
         "fileName": "mxskv-support-reordering-tickets-drag-and-drop.md"
-      },
-      {
-        "id": "gchtd",
-        "name": "More visible cues that a ticket is done/archived",
-        "status": "idea",
-        "type": "bug",
-        "fileName": "gchtd-more-visible-cues-that-a-ticket-is-done-archived.md"
-      },
-      {
-        "id": "azqm9",
-        "name": "refactor app to improve maintainability",
-        "status": "idea",
-        "type": "bug",
-        "fileName": "azqm9-refactor-app-to-improve-maintainability.md"
-      },
-      {
-        "id": "am7dd",
-        "name": "Show which app you are adding to in the create modal and edit repo modal",
-        "status": "idea",
-        "type": "bug",
-        "fileName": "am7dd-show-which-app-you-are-adding-to-in-the-create-modal-and-edit-repo-modal.md"
-      },
-      {
-        "id": "5t5p3",
-        "name": "Ability to delete tickets or projects",
-        "status": "done",
-        "type": "bug",
-        "fileName": "5t5p3-ability-to-delete-tickets-or-projects.md"
-      },
-      {
-        "id": "byvj8",
-        "name": "Add quick edit of ticket name",
-        "status": "done",
-        "type": "bug",
-        "fileName": "byvj8-add-quick-edit-of-ticket-name.md"
-      },
-      {
-        "id": "dz55s",
-        "name": "Save filters in localStorage and persist on navigating projects/repos",
-        "status": "done",
-        "type": "",
-        "fileName": "dz55s-save-filters-in-localstorage-and-persist-on-navigating-projects-repos.md"
-      },
-      {
-        "id": "qk7pf",
-        "name": "Track assignee history per status transition",
-        "status": "idea",
-        "type": "feature",
-        "fileName": "qk7pf-track-assignee-history-per-status-transition.md"
-      },
-      {
-        "id": "vq9ss",
-        "name": "Add reset filters to sidebar, and show helper if no results due to filtering",
-        "status": "idea",
-        "type": "",
-        "assignee": "",
-        "fileName": "vq9ss-add-reset-filters-to-sidebar-and-show-helper-if-no-results-due-to-filtering.md"
-      },
-      {
-        "id": "fb33w",
-        "name": "Ability to link to other tickets",
-        "status": "idea",
-        "type": "",
-        "assignee": "",
-        "fileName": "fb33w-ability-to-link-to-other-tickets.md"
-      },
-      {
-        "id": "xnn77",
-        "name": "Creating a ticket should navigate to that ticket edit page",
-        "status": "idea",
-        "type": "",
-        "assignee": "",
-        "fileName": "xnn77-creating-a-ticket-should-navigate-to-that-ticket-edit-page.md"
-      },
-      {
-        "id": "pqf24",
-        "name": "Issue when switching repos sometimes",
-        "status": "idea",
-        "type": "bug",
-        "assignee": "",
-        "fileName": "pqf24-issue-when-switching-repos-sometimes.md"
       },
       {
         "id": "dkkrt",
@@ -255,6 +256,13 @@
         "type": "",
         "assignee": "",
         "fileName": "dkkrt-support-resizing-the-sidebar-horizontal-width.md"
+      },
+      {
+        "id": "qk7pf",
+        "name": "Track assignee history per status transition",
+        "status": "idea",
+        "type": "feature",
+        "fileName": "qk7pf-track-assignee-history-per-status-transition.md"
       }
     ],
     "subprojects": []
