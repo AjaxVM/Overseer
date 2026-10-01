@@ -1,38 +1,30 @@
 import fs from 'fs';
-import { parseFrontmatter, stringifyFrontmatter, trueUpAfterWrite, writePreservingEol } from '../manifest';
 
-export function handleGetFileRead(req: any, res: any) {
-  const urlObj = new URL(req.url, 'http://localhost');
-  const filePath = urlObj.searchParams.get('path');
-  if (!filePath || !fs.existsSync(filePath)) {
-    res.statusCode = 404;
-    return res.end(JSON.stringify({ error: 'File not found' }));
-  }
-  const raw = fs.readFileSync(filePath, 'utf-8');
-  const { attributes, body } = parseFrontmatter(raw);
-  res.setHeader('Content-Type', 'application/json');
-  return res.end(JSON.stringify({ path: filePath, attributes, body }));
-}
+import type { FastifyInstance } from 'fastify';
 
-export function handlePostFileSave(req: any, res: any) {
-  let reqBody = '';
-  req.on('data', (chunk: string) => {
-    reqBody += chunk;
+import { parseFrontmatter, stringifyFrontmatter, trueUpAfterWrite, writePreservingEol } from '../manifest.ts';
+
+export function fileRoutes(app: FastifyInstance) {
+  app.get<{ Querystring: { path?: string } }>('/api/file/read', async (request, reply) => {
+    const filePath = request.query.path;
+    if (!filePath || !fs.existsSync(filePath)) {
+      return reply.code(404).send({ error: 'File not found' });
+    }
+    const raw = fs.readFileSync(filePath, 'utf-8');
+    const { attributes, body } = parseFrontmatter(raw);
+    return { path: filePath, attributes, body };
   });
-  req.on('end', () => {
-    try {
-      const { path: filePath, attributes, body } = JSON.parse(reqBody);
+
+  app.post<{ Body: { path?: string; attributes: Record<string, any>; body: string } }>(
+    '/api/file/save',
+    async request => {
+      const { path: filePath, attributes, body } = request.body;
       if (!filePath) throw new Error('File path required');
-      const fileContent = stringifyFrontmatter(attributes, body);
-      writePreservingEol(filePath, fileContent);
+      writePreservingEol(filePath, stringifyFrontmatter(attributes, body));
 
       if (filePath.toLowerCase().endsWith('.md')) trueUpAfterWrite(filePath);
 
-      res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ success: true }));
-    } catch (e: any) {
-      res.statusCode = 400;
-      res.end(JSON.stringify({ error: e.message }));
+      return { success: true };
     }
-  });
+  );
 }

@@ -1,7 +1,10 @@
 import fs from 'fs';
 import path from 'path';
-import { DEFAULT_REPO_CONFIG, getOrInitRepoConfig } from '../config';
-import type { RepoConfig } from '../config';
+
+import type { FastifyInstance } from 'fastify';
+
+import { DEFAULT_REPO_CONFIG, getOrInitRepoConfig } from '../config.ts';
+import type { RepoConfig } from '../config.ts';
 import {
   loadOrTrueUpProject,
   readRawProjectManifest,
@@ -14,8 +17,8 @@ import {
   reorderByKeys,
   getPendingManifest,
   commitPendingManifest
-} from '../manifest';
-import type { RouteContext } from '../types';
+} from '../manifest.ts';
+import type { RouteContext } from '../types.ts';
 
 export function slugify(text: string): string {
   return text
@@ -113,110 +116,111 @@ function scanCategoryDirectory(categoryPath: string, isProjects: boolean): any[]
   }
 }
 
-export function handleGetProjects(ctx: RouteContext, _req: any, res: any) {
-  res.setHeader('Content-Type', 'application/json');
-  const combinedTree = Array.from(ctx.watchedRepoRoots).map(repoRoot => {
-    const repoConfig = getOrInitRepoConfig(repoRoot);
-    const docsPath = path.join(repoRoot, repoConfig.docsDir);
-    const projectsPath = path.join(repoRoot, repoConfig.projectsDir);
-
-    return {
-      name: path.basename(repoRoot),
-      type: 'repository',
-      repoPath: repoRoot,
-      config: repoConfig,
-      children: [
-        {
-          name: repoConfig.docsDir,
-          type: 'category',
-          categoryType: 'docs',
-          path: docsPath,
-          children: scanCategoryDirectory(docsPath, false)
-        },
-        {
-          name: repoConfig.projectsDir,
-          type: 'category',
-          categoryType: 'projects',
-          path: projectsPath,
-          children: scanCategoryDirectory(projectsPath, true)
-        }
-      ]
-    };
-  });
-
-  return res.end(JSON.stringify(combinedTree));
+function requireProjectPath(projectPath: string | undefined): string {
+  if (!projectPath || !fs.existsSync(projectPath)) {
+    throw new Error('Valid projectPath required');
+  }
+  return projectPath;
 }
 
-export function handleGetProject(ctx: RouteContext, req: any, res: any) {
-  const urlObj = new URL(req.url, 'http://localhost');
-  const projectPath = urlObj.searchParams.get('path');
-  if (!projectPath || !fs.existsSync(projectPath)) {
-    res.statusCode = 404;
-    return res.end(JSON.stringify({ error: 'Project path not found' }));
-  }
+export function projectRoutes(app: FastifyInstance, ctx: RouteContext) {
+  app.get('/api/projects', async () => {
+    return Array.from(ctx.watchedRepoRoots).map(repoRoot => {
+      const repoConfig = getOrInitRepoConfig(repoRoot);
+      const docsPath = path.join(repoRoot, repoConfig.docsDir);
+      const projectsPath = path.join(repoRoot, repoConfig.projectsDir);
 
-  let targetRepoConfig = DEFAULT_REPO_CONFIG;
-  let matchedRepoRoot: string | null = null;
-  for (const repoRoot of ctx.watchedRepoRoots) {
-    if (projectPath.startsWith(repoRoot)) {
-      targetRepoConfig = getOrInitRepoConfig(repoRoot);
-      matchedRepoRoot = repoRoot;
-      break;
-    }
-  }
-
-  // Serve the cached manifest as-is - don't block navigation on a live readdir/stat
-  // walk of every ticket and sub-project on every request. The file watcher
-  // (src/backend/index.ts) trues this up in the background off the request path and
-  // pushes a projects-update event when something actually changed. A directory that
-  // has never been touched at all has nothing cached yet - serve a cheap filename-only
-  // shallow manifest immediately and run the real true-up in the background instead of
-  // blocking this response on a full frontmatter-parse walk.
-  const cachedManifest = readRawProjectManifest(projectPath);
-  if (!cachedManifest) {
-    setImmediate(() => {
-      try {
-        loadOrTrueUpProject(projectPath, targetRepoConfig);
-      } catch (e) {
-        // Best-effort background true-up - the shallow manifest already served this request.
-      }
-      ctx.server.ws.send({ type: 'custom', event: 'projects-update' });
+      return {
+        name: path.basename(repoRoot),
+        type: 'repository',
+        repoPath: repoRoot,
+        config: repoConfig,
+        children: [
+          {
+            name: repoConfig.docsDir,
+            type: 'category',
+            categoryType: 'docs',
+            path: docsPath,
+            children: scanCategoryDirectory(docsPath, false)
+          },
+          {
+            name: repoConfig.projectsDir,
+            type: 'category',
+            categoryType: 'projects',
+            path: projectsPath,
+            children: scanCategoryDirectory(projectsPath, true)
+          }
+        ]
+      };
     });
-  }
+  });
 
-  // The passive watcher never writes _project.json on its own (see loadOrTrueUpProject's
-  // `persist: false` path) - a reconciled-but-unwritten result surfaces here instead, so
-  // the UI shows the live data plus a "sync now" affordance rather than the stale disk copy.
-  const pendingManifest = getPendingManifest(projectPath);
-  const manifest = pendingManifest || cachedManifest || buildShallowManifest(projectPath);
-
-  let description = '';
-  const descFile =
-    manifest.descriptionFile ||
-    (fs.existsSync(path.join(projectPath, '_project.md')) ? '_project.md' : null);
-  if (descFile) {
-    const descPath = path.join(projectPath, descFile);
-    if (fs.existsSync(descPath)) {
-      try {
-        description = fs.readFileSync(descPath, 'utf-8');
-      } catch (e) {}
+  app.get<{ Querystring: { path?: string } }>('/api/project', async (request, reply) => {
+    const projectPath = request.query.path;
+    if (!projectPath || !fs.existsSync(projectPath)) {
+      return reply.code(404).send({ error: 'Project path not found' });
     }
-  }
 
-  let parentPath: string | null = null;
-  if (matchedRepoRoot) {
-    const projectsRoot = path.join(matchedRepoRoot, targetRepoConfig.projectsDir);
-    const parentDir = path.dirname(projectPath);
-    // The projects root itself is a valid landing node - only suppress the "up"
-    // link when we're already there, not merely because a parent equals it.
-    if (projectPath !== projectsRoot && parentDir.startsWith(projectsRoot)) {
-      parentPath = parentDir;
+    let targetRepoConfig = DEFAULT_REPO_CONFIG;
+    let matchedRepoRoot: string | null = null;
+    for (const repoRoot of ctx.watchedRepoRoots) {
+      if (projectPath.startsWith(repoRoot)) {
+        targetRepoConfig = getOrInitRepoConfig(repoRoot);
+        matchedRepoRoot = repoRoot;
+        break;
+      }
     }
-  }
 
-  res.setHeader('Content-Type', 'application/json');
-  return res.end(
-    JSON.stringify({
+    // Serve the cached manifest as-is - don't block navigation on a live readdir/stat
+    // walk of every ticket and sub-project on every request. The file watcher
+    // (src/backend/index.ts) trues this up in the background off the request path and
+    // pushes a projects-update event when something actually changed. A directory that
+    // has never been touched at all has nothing cached yet - serve a cheap filename-only
+    // shallow manifest immediately and run the real true-up in the background instead of
+    // blocking this response on a full frontmatter-parse walk.
+    const cachedManifest = readRawProjectManifest(projectPath);
+    if (!cachedManifest) {
+      setImmediate(() => {
+        try {
+          loadOrTrueUpProject(projectPath, targetRepoConfig);
+        } catch (e) {
+          // Best-effort background true-up - the shallow manifest already served this request.
+        }
+        ctx.broadcast();
+      });
+    }
+
+    // The passive watcher never writes _project.json on its own (see loadOrTrueUpProject's
+    // `persist: false` path) - a reconciled-but-unwritten result surfaces here instead, so
+    // the UI shows the live data plus a "sync now" affordance rather than the stale disk copy.
+    const pendingManifest = getPendingManifest(projectPath);
+    const manifest = pendingManifest || cachedManifest || buildShallowManifest(projectPath);
+
+    let description = '';
+    const descFile =
+      manifest.descriptionFile ||
+      (fs.existsSync(path.join(projectPath, '_project.md')) ? '_project.md' : null);
+    if (descFile) {
+      const descPath = path.join(projectPath, descFile);
+      if (fs.existsSync(descPath)) {
+        try {
+          description = fs.readFileSync(descPath, 'utf-8');
+        } catch (e) {}
+      }
+    }
+
+    let parentPath: string | null = null;
+    if (matchedRepoRoot) {
+      const projectsRoot = path.join(matchedRepoRoot, targetRepoConfig.projectsDir);
+      const parentDir = path.dirname(projectPath);
+      // The projects root itself is a valid landing node - only suppress the "up"
+      // link when we're already there, not merely because a parent equals it.
+      if (projectPath !== projectsRoot && parentDir.startsWith(projectsRoot)) {
+        parentPath = parentDir;
+      }
+    }
+
+    return {
       success: true,
       path: projectPath,
       repoPath: matchedRepoRoot,
@@ -224,57 +228,33 @@ export function handleGetProject(ctx: RouteContext, req: any, res: any) {
       manifest,
       description,
       pendingSync: !!pendingManifest
-    })
-  );
-}
-
-export function handlePostProjectDescription(req: any, res: any) {
-  let reqBody = '';
-  req.on('data', (chunk: string) => {
-    reqBody += chunk;
+    };
   });
-  req.on('end', () => {
-    try {
-      const { projectPath, description } = JSON.parse(reqBody);
-      if (!projectPath || !fs.existsSync(projectPath)) {
-        throw new Error('Valid projectPath required');
-      }
-      const descPath = path.join(projectPath, '_project.md');
-      fs.writeFileSync(descPath, description || '', 'utf-8');
 
-      const manifest = readRawProjectManifest(projectPath);
-      if (manifest && manifest.descriptionFile !== '_project.md') {
-        manifest.descriptionFile = '_project.md';
-        saveProjectManifest(projectPath, manifest);
-      }
+  app.post<{ Body: { projectPath?: string; description?: string } }>('/api/project/description', async request => {
+    const projectPath = requireProjectPath(request.body.projectPath);
+    fs.writeFileSync(path.join(projectPath, '_project.md'), request.body.description || '', 'utf-8');
 
-      res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ success: true }));
-    } catch (e: any) {
-      res.statusCode = 400;
-      res.end(JSON.stringify({ error: e.message }));
+    const manifest = readRawProjectManifest(projectPath);
+    if (manifest && manifest.descriptionFile !== '_project.md') {
+      manifest.descriptionFile = '_project.md';
+      saveProjectManifest(projectPath, manifest);
     }
-  });
-}
 
-// ticketOrder is a list of ticket fileNames, subprojectOrder a list of subproject slugs,
-// each in the new desired order - either or both may be sent. Array order in
-// projectmap.tickets/subprojects is the order (no separate ordering field - poc/mxskv).
-export function handlePostProjectReorder(req: any, res: any) {
-  let reqBody = '';
-  req.on('data', (chunk: string) => {
-    reqBody += chunk;
+    return { success: true };
   });
-  req.on('end', () => {
-    try {
-      const { projectPath, ticketOrder, subprojectOrder } = JSON.parse(reqBody);
-      if (!projectPath || !fs.existsSync(projectPath)) {
-        throw new Error('Valid projectPath required');
-      }
+
+  // ticketOrder is a list of ticket fileNames, subprojectOrder a list of subproject slugs,
+  // each in the new desired order - either or both may be sent. Array order in
+  // projectmap.tickets/subprojects is the order (no separate ordering field - poc/mxskv).
+  app.post<{ Body: { projectPath?: string; ticketOrder?: string[]; subprojectOrder?: string[] } }>(
+    '/api/project/reorder',
+    async request => {
+      const { ticketOrder, subprojectOrder } = request.body;
+      const projectPath = requireProjectPath(request.body.projectPath);
       const manifest = readRawProjectManifest(projectPath);
-      if (!manifest) {
-        throw new Error('Project manifest not found');
-      }
+      if (!manifest) throw new Error('Project manifest not found');
+
       if (ticketOrder) {
         manifest.projectmap.tickets = reorderByKeys(manifest.projectmap.tickets, ticketOrder, t => t.fileName);
       }
@@ -282,181 +262,128 @@ export function handlePostProjectReorder(req: any, res: any) {
         manifest.projectmap.subprojects = reorderByKeys(manifest.projectmap.subprojects, subprojectOrder, s => s.slug);
       }
       saveProjectManifest(projectPath, manifest);
-      res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ success: true }));
-    } catch (e: any) {
-      res.statusCode = 400;
-      res.end(JSON.stringify({ error: e.message }));
+      return { success: true };
     }
-  });
-}
+  );
 
-// Persists a pending true-up (see getPendingManifest) that the passive watcher computed
-// but held back from writing, once the user explicitly asks to sync it in.
-export function handlePostProjectSync(ctx: RouteContext, req: any, res: any) {
-  let reqBody = '';
-  req.on('data', (chunk: string) => {
-    reqBody += chunk;
+  // Persists a pending true-up (see getPendingManifest) that the passive watcher computed
+  // but held back from writing, once the user explicitly asks to sync it in.
+  app.post<{ Body: { projectPath?: string } }>('/api/project/sync', async request => {
+    const synced = commitPendingManifest(requireProjectPath(request.body.projectPath));
+    ctx.broadcast();
+    return { success: true, synced };
   });
-  req.on('end', () => {
-    try {
-      const { projectPath } = JSON.parse(reqBody);
-      if (!projectPath || !fs.existsSync(projectPath)) {
-        throw new Error('Valid projectPath required');
-      }
-      const synced = commitPendingManifest(projectPath);
-      ctx.server.ws.send({ type: 'custom', event: 'projects-update' });
-      res.setHeader('Content-Type', 'application/json');
-      return res.end(JSON.stringify({ success: true, synced }));
-    } catch (e: any) {
-      res.statusCode = 400;
-      return res.end(JSON.stringify({ error: e.message }));
+
+  // Display-name-only rename - the directory slug and every child path stay as-is.
+  app.post<{ Body: { projectPath?: string; name?: string } }>('/api/project/rename', async request => {
+    const { projectPath, name } = request.body;
+    if (!projectPath || !fs.existsSync(projectPath) || !name || !String(name).trim()) {
+      throw new Error('Valid projectPath and name are required.');
     }
-  });
-}
+    const manifest = readRawProjectManifest(projectPath);
+    if (!manifest) throw new Error('Project manifest not found');
 
-// Display-name-only rename - the directory slug and every child path stay as-is.
-export function handlePostProjectRename(ctx: RouteContext, req: any, res: any) {
-  let reqBody = '';
-  req.on('data', (chunk: string) => {
-    reqBody += chunk;
-  });
-  req.on('end', () => {
-    try {
-      const { projectPath, name } = JSON.parse(reqBody);
-      if (!projectPath || !fs.existsSync(projectPath) || !name || !String(name).trim()) {
-        throw new Error('Valid projectPath and name are required.');
-      }
-      const manifest = readRawProjectManifest(projectPath);
-      if (!manifest) {
-        throw new Error('Project manifest not found');
-      }
-      manifest.name = String(name).trim();
-      saveProjectManifest(projectPath, manifest);
+    manifest.name = String(name).trim();
+    saveProjectManifest(projectPath, manifest);
 
-      // A sub-project's display name is also cached on its PARENT's manifest (see
-      // loadOrTrueUpProject's subManifestCache) - the file watcher only trues up the
-      // renamed directory itself (dirname of the changed _project.json), never the
-      // parent that lists it, so without this the parent's Sub-projects list keeps
-      // showing the old name until something else happens to rescan it.
-      const repoRoot = Array.from(ctx.watchedRepoRoots).find(root => projectPath.startsWith(root));
-      if (repoRoot) {
-        const repoConfig = getOrInitRepoConfig(repoRoot);
-        const projectsRoot = path.join(repoRoot, repoConfig.projectsDir);
-        const parentDir = path.dirname(projectPath);
-        if (parentDir !== projectsRoot && parentDir.startsWith(projectsRoot)) {
-          loadOrTrueUpProject(parentDir, repoConfig);
-        }
+    // A sub-project's display name is also cached on its PARENT's manifest (see
+    // loadOrTrueUpProject's subManifestCache) - the file watcher only trues up the
+    // renamed directory itself (dirname of the changed _project.json), never the
+    // parent that lists it, so without this the parent's Sub-projects list keeps
+    // showing the old name until something else happens to rescan it.
+    const repoRoot = Array.from(ctx.watchedRepoRoots).find(root => projectPath.startsWith(root));
+    if (repoRoot) {
+      const repoConfig = getOrInitRepoConfig(repoRoot);
+      const projectsRoot = path.join(repoRoot, repoConfig.projectsDir);
+      const parentDir = path.dirname(projectPath);
+      if (parentDir !== projectsRoot && parentDir.startsWith(projectsRoot)) {
+        loadOrTrueUpProject(parentDir, repoConfig);
       }
-
-      ctx.server.ws.send({ type: 'custom', event: 'projects-update' });
-      res.setHeader('Content-Type', 'application/json');
-      return res.end(JSON.stringify({ success: true }));
-    } catch (e: any) {
-      res.statusCode = 400;
-      return res.end(JSON.stringify({ error: e.message }));
     }
+
+    ctx.broadcast();
+    return { success: true };
   });
-}
 
-export function handlePostItemCreate(ctx: RouteContext, req: any, res: any) {
-  let reqBody = '';
-  req.on('data', (chunk: string) => {
-    reqBody += chunk;
-  });
-  req.on('end', () => {
-    try {
-      const { parentPath, repoPath, type, name, attributes } = JSON.parse(reqBody);
-      if (!parentPath || !repoPath || !name.trim()) {
-        throw new Error('parentPath, repoPath, and name are required.');
-      }
-
-      const repoConfig = getOrInitRepoConfig(repoPath);
-      const itemSlug = slugify(name);
-
-      if (type === 'directory') {
-        // Directories are named purely by title slug
-        const newDirPath = path.join(parentPath, itemSlug);
-        if (fs.existsSync(newDirPath)) {
-          throw new Error(`Directory "${itemSlug}" already exists in parent.`);
-        }
-        fs.mkdirSync(newDirPath, { recursive: true });
-
-        // Save clean project name and projectmap in _project.json
-        saveProjectManifest(newDirPath, {
-          name: name.trim(),
-          projectmap: { tickets: [], subprojects: [] }
-        });
-
-        // True up parent project manifest if parent is a project directory
-        loadOrTrueUpProject(parentPath, repoConfig);
-
-        ctx.server.ws.send({ type: 'custom', event: 'projects-update' });
-        res.setHeader('Content-Type', 'application/json');
-        return res.end(JSON.stringify({ success: true, createdPath: newDirPath }));
-      } else {
-        // Tickets: support short-uuid or sequential based on repoConfig.idFormat
-        let generatedId = '';
-        let fileName = '';
-
-        if (repoConfig.idFormat === 'sequential') {
-          const ticketNum = getNextTicketNumber(parentPath);
-          generatedId = generateHierarchicalTicketId(parentPath, repoPath, repoConfig, ticketNum);
-          fileName = `${ticketNum}-${itemSlug}.md`;
-        } else {
-          do {
-            generatedId = generateShortId();
-            fileName = `${generatedId}-${itemSlug}.md`;
-          } while (fs.existsSync(path.join(parentPath, fileName)));
-        }
-
-        const newFilePath = path.join(parentPath, fileName);
-        if (fs.existsSync(newFilePath)) {
-          throw new Error(`File "${fileName}" already exists in target directory.`);
-        }
-
-        const initialAttributes: Record<string, any> = {
-          id: generatedId,
-          name
-        };
-        (repoConfig.frontmatterSchema || []).forEach((field: any) => {
-          if (field.name === 'id') return;
-          if (field.name === 'name') return;
-          const value = attributes?.[field.name];
-          if (value) initialAttributes[field.name] = value;
-        });
-
-        const initialBody = `# ${name.trim()}\n\nWrite details or specifications here...`;
-        const fileContent = stringifyFrontmatter(initialAttributes, initialBody);
-
-        fs.writeFileSync(newFilePath, fileContent, 'utf-8');
-
-        trueUpAfterWrite(newFilePath);
-
-        ctx.server.ws.send({ type: 'custom', event: 'projects-update' });
-        res.setHeader('Content-Type', 'application/json');
-        return res.end(
-          JSON.stringify({ success: true, createdPath: newFilePath, id: generatedId })
-        );
-      }
-    } catch (e: any) {
-      res.statusCode = 400;
-      return res.end(JSON.stringify({ error: e.message }));
+  app.post<{
+    Body: { parentPath?: string; repoPath?: string; type?: string; name: string; attributes?: Record<string, any> };
+  }>('/api/item/create', async request => {
+    const { parentPath, repoPath, type, name, attributes } = request.body;
+    if (!parentPath || !repoPath || !name.trim()) {
+      throw new Error('parentPath, repoPath, and name are required.');
     }
-  });
-}
 
-// Deletes a ticket file or a project/sub-project directory, then trues up the parent
-// project's manifest so the removed entry disappears immediately rather than waiting on
-// the file watcher's debounce window.
-export function handlePostItemDelete(ctx: RouteContext, req: any, res: any) {
-  let reqBody = '';
-  req.on('data', (chunk: string) => {
-    reqBody += chunk;
+    const repoConfig = getOrInitRepoConfig(repoPath);
+    const itemSlug = slugify(name);
+
+    if (type === 'directory') {
+      // Directories are named purely by title slug
+      const newDirPath = path.join(parentPath, itemSlug);
+      if (fs.existsSync(newDirPath)) {
+        throw new Error(`Directory "${itemSlug}" already exists in parent.`);
+      }
+      fs.mkdirSync(newDirPath, { recursive: true });
+
+      // Save clean project name and projectmap in _project.json
+      saveProjectManifest(newDirPath, {
+        name: name.trim(),
+        projectmap: { tickets: [], subprojects: [] }
+      });
+
+      // True up parent project manifest if parent is a project directory
+      loadOrTrueUpProject(parentPath, repoConfig);
+
+      ctx.broadcast();
+      return { success: true, createdPath: newDirPath };
+    }
+
+    // Tickets: support short-uuid or sequential based on repoConfig.idFormat
+    let generatedId = '';
+    let fileName = '';
+
+    if (repoConfig.idFormat === 'sequential') {
+      const ticketNum = getNextTicketNumber(parentPath);
+      generatedId = generateHierarchicalTicketId(parentPath, repoPath, repoConfig, ticketNum);
+      fileName = `${ticketNum}-${itemSlug}.md`;
+    } else {
+      do {
+        generatedId = generateShortId();
+        fileName = `${generatedId}-${itemSlug}.md`;
+      } while (fs.existsSync(path.join(parentPath, fileName)));
+    }
+
+    const newFilePath = path.join(parentPath, fileName);
+    if (fs.existsSync(newFilePath)) {
+      throw new Error(`File "${fileName}" already exists in target directory.`);
+    }
+
+    const initialAttributes: Record<string, any> = {
+      id: generatedId,
+      name
+    };
+    (repoConfig.frontmatterSchema || []).forEach((field: any) => {
+      if (field.name === 'id') return;
+      if (field.name === 'name') return;
+      const value = attributes?.[field.name];
+      if (value) initialAttributes[field.name] = value;
+    });
+
+    const initialBody = `# ${name.trim()}\n\nWrite details or specifications here...`;
+    fs.writeFileSync(newFilePath, stringifyFrontmatter(initialAttributes, initialBody), 'utf-8');
+
+    trueUpAfterWrite(newFilePath);
+
+    ctx.broadcast();
+    return { success: true, createdPath: newFilePath, id: generatedId };
   });
-  req.on('end', () => {
-    try {
-      const { itemPath, type, parentPath, repoPath } = JSON.parse(reqBody);
+
+  // Deletes a ticket file or a project/sub-project directory, then trues up the parent
+  // project's manifest so the removed entry disappears immediately rather than waiting on
+  // the file watcher's debounce window.
+  app.post<{ Body: { itemPath?: string; type?: string; parentPath?: string; repoPath?: string } }>(
+    '/api/item/delete',
+    async request => {
+      const { itemPath, type, parentPath, repoPath } = request.body;
       if (!itemPath || !fs.existsSync(itemPath)) {
         throw new Error('Valid itemPath required');
       }
@@ -468,16 +395,11 @@ export function handlePostItemDelete(ctx: RouteContext, req: any, res: any) {
       }
 
       if (parentPath && repoPath && fs.existsSync(parentPath)) {
-        const repoConfig = getOrInitRepoConfig(repoPath);
-        loadOrTrueUpProject(parentPath, repoConfig);
+        loadOrTrueUpProject(parentPath, getOrInitRepoConfig(repoPath));
       }
 
-      ctx.server.ws.send({ type: 'custom', event: 'projects-update' });
-      res.setHeader('Content-Type', 'application/json');
-      return res.end(JSON.stringify({ success: true }));
-    } catch (e: any) {
-      res.statusCode = 400;
-      return res.end(JSON.stringify({ error: e.message }));
+      ctx.broadcast();
+      return { success: true };
     }
-  });
+  );
 }

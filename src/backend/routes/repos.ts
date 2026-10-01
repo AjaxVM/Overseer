@@ -1,42 +1,12 @@
 import fs from 'fs';
 import path from 'path';
-import { GLOBAL_CONFIG_PATH, getOrInitOverseerGlobalConfig, getOrInitRepoConfig } from '../config';
-import type { RepoConfig } from '../config';
-import { loadOrTrueUpProject } from '../manifest';
-import type { RouteContext } from '../types';
 
-// Backs the in-app folder browser in the Register Repository modal. Replaces the old
-// PowerShell/WinForms FolderBrowserDialog spawn, which took a couple of seconds to open
-// (process spawn + WinForms assembly load) and could open behind the browser window.
-// With no path given, starts at the directory the dev server was launched from - that's
-// almost always the most useful starting point (usually a sibling of the repo to register).
-export function handleGetFsBrowse(req: any, res: any) {
-  const urlObj = new URL(req.url, 'http://localhost');
-  const requested = urlObj.searchParams.get('path') || '';
-  const targetPath = requested || process.cwd();
+import type { FastifyInstance } from 'fastify';
 
-  if (!fs.existsSync(targetPath) || !fs.statSync(targetPath).isDirectory()) {
-    res.statusCode = 400;
-    return res.end(JSON.stringify({ error: 'Not a valid directory' }));
-  }
-
-  let directories: { name: string; path: string }[] = [];
-  try {
-    directories = fs
-      .readdirSync(targetPath, { withFileTypes: true })
-      .filter(e => e.isDirectory() && !e.name.startsWith('.'))
-      .map(e => ({ name: e.name, path: path.join(targetPath, e.name) }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  } catch (e) {
-    // Permission-denied directories etc. - show an empty listing rather than erroring the whole browse.
-  }
-
-  const root = path.parse(targetPath).root;
-  const parent = targetPath === root ? null : path.dirname(targetPath);
-
-  res.setHeader('Content-Type', 'application/json');
-  res.end(JSON.stringify({ path: targetPath, parent, directories }));
-}
+import { GLOBAL_CONFIG_PATH, getOrInitOverseerGlobalConfig, getOrInitRepoConfig } from '../config.ts';
+import type { FrontmatterFieldConfig, RepoConfig } from '../config.ts';
+import { loadOrTrueUpProject } from '../manifest.ts';
+import type { RouteContext } from '../types.ts';
 
 // Ensures a repo's docs/projects folders exist, and trues up the projects root's
 // manifest against disk. Runs before the file watcher attaches, so a freshly
@@ -51,7 +21,7 @@ export function ensureRepoScaffold(repoRoot: string, repoConfig: RepoConfig) {
   // True up each top-level project dir's own manifest first, so a pre-existing project
   // folder (fresh clone, manually created dir) gets its _project.json eagerly instead of
   // only on first individual visit - without this, reorder writes silently no-op in
-  // handlePostProjectReorder for any top-level project never yet navigated into.
+  // /api/project/reorder for any top-level project never yet navigated into.
   fs.readdirSync(projectsPath, { withFileTypes: true })
     .filter(entry => entry.isDirectory() && !entry.name.startsWith('.'))
     .forEach(entry => {
@@ -63,73 +33,75 @@ export function ensureRepoScaffold(repoRoot: string, repoConfig: RepoConfig) {
   return { docsPath, projectsPath };
 }
 
-export function handlePostConfigSave(ctx: RouteContext, req: any, res: any) {
-  let reqBody = '';
-  req.on('data', (chunk: string) => {
-    reqBody += chunk;
-  });
-  req.on('end', () => {
-    try {
-      const { repoPath, docsDir, projectsDir, frontmatterSchema } = JSON.parse(reqBody);
-      if (!repoPath) throw new Error('Repo path required');
+export function repoRoutes(app: FastifyInstance, ctx: RouteContext) {
+  // Backs the in-app folder browser in the Register Repository modal. Replaces the old
+  // PowerShell/WinForms FolderBrowserDialog spawn, which took a couple of seconds to open
+  // (process spawn + WinForms assembly load) and could open behind the browser window.
+  // With no path given, starts at the directory the server was launched from - that's
+  // almost always the most useful starting point (usually a sibling of the repo to register).
+  app.get<{ Querystring: { path?: string } }>('/api/fs/browse', async request => {
+    const targetPath = request.query.path || process.cwd();
 
-      const repoConfigPath = path.join(repoPath, 'overseer.json');
-      let existing = {};
-      if (fs.existsSync(repoConfigPath)) {
-        try {
-          existing = JSON.parse(fs.readFileSync(repoConfigPath, 'utf-8'));
-        } catch (e) {}
-      }
-
-      const updatedConfig = {
-        ...existing,
-        docsDir: docsDir || 'docs',
-        projectsDir: projectsDir || 'projects',
-        frontmatterSchema: frontmatterSchema || []
-      };
-
-      fs.writeFileSync(repoConfigPath, JSON.stringify(updatedConfig, null, 2) + '\n', 'utf-8');
-      ctx.server.ws.send({ type: 'custom', event: 'projects-update' });
-
-      res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ success: true }));
-    } catch (e: any) {
-      res.statusCode = 400;
-      res.end(JSON.stringify({ error: e.message }));
+    if (!fs.existsSync(targetPath) || !fs.statSync(targetPath).isDirectory()) {
+      throw new Error('Not a valid directory');
     }
-  });
-}
 
-export function handlePostProjectsAdd(ctx: RouteContext, req: any, res: any) {
-  let body = '';
-  req.on('data', (chunk: string) => {
-    body += chunk;
-  });
-  req.on('end', () => {
+    let directories: { name: string; path: string }[] = [];
     try {
-      const { repoPath } = JSON.parse(body);
-      const resolvedRepoRoot = path.resolve(repoPath);
-
-      const repoConfig = getOrInitRepoConfig(resolvedRepoRoot);
-      const { docsPath, projectsPath } = ensureRepoScaffold(resolvedRepoRoot, repoConfig);
-
-      const currentGlobalConfig = getOrInitOverseerGlobalConfig();
-      if (!currentGlobalConfig.projectRoots.includes(resolvedRepoRoot)) {
-        currentGlobalConfig.projectRoots.push(resolvedRepoRoot);
-        fs.writeFileSync(GLOBAL_CONFIG_PATH, JSON.stringify(currentGlobalConfig, null, 2), 'utf-8');
-      }
-
-      ctx.watchedRepoRoots.add(resolvedRepoRoot);
-      ctx.server.watcher.add(docsPath);
-      ctx.server.watcher.add(projectsPath);
-      ctx.server.watcher.add(path.join(resolvedRepoRoot, 'overseer.json'));
-      ctx.server.ws.send({ type: 'custom', event: 'projects-update' });
-
-      res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ success: true, repoPath: resolvedRepoRoot }));
-    } catch (e: any) {
-      res.statusCode = 400;
-      res.end(JSON.stringify({ error: e.message }));
+      directories = fs
+        .readdirSync(targetPath, { withFileTypes: true })
+        .filter(e => e.isDirectory() && !e.name.startsWith('.'))
+        .map(e => ({ name: e.name, path: path.join(targetPath, e.name) }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    } catch (e) {
+      // Permission-denied directories etc. - show an empty listing rather than erroring the whole browse.
     }
+
+    const root = path.parse(targetPath).root;
+    const parent = targetPath === root ? null : path.dirname(targetPath);
+
+    return { path: targetPath, parent, directories };
+  });
+
+  app.post<{
+    Body: { repoPath?: string; docsDir?: string; projectsDir?: string; frontmatterSchema?: FrontmatterFieldConfig[] };
+  }>('/api/config/save', async request => {
+    const { repoPath, docsDir, projectsDir, frontmatterSchema } = request.body;
+    if (!repoPath) throw new Error('Repo path required');
+
+    const repoConfigPath = path.join(repoPath, 'overseer.json');
+    let existing = {};
+    if (fs.existsSync(repoConfigPath)) {
+      try {
+        existing = JSON.parse(fs.readFileSync(repoConfigPath, 'utf-8'));
+      } catch (e) {}
+    }
+
+    const updatedConfig = {
+      ...existing,
+      docsDir: docsDir || 'docs',
+      projectsDir: projectsDir || 'projects',
+      frontmatterSchema: frontmatterSchema || []
+    };
+
+    fs.writeFileSync(repoConfigPath, JSON.stringify(updatedConfig, null, 2) + '\n', 'utf-8');
+    ctx.broadcast();
+    return { success: true };
+  });
+
+  app.post<{ Body: { repoPath: string } }>('/api/projects/add', async request => {
+    const resolvedRepoRoot = path.resolve(request.body.repoPath);
+
+    ensureRepoScaffold(resolvedRepoRoot, getOrInitRepoConfig(resolvedRepoRoot));
+
+    const currentGlobalConfig = getOrInitOverseerGlobalConfig();
+    if (!currentGlobalConfig.projectRoots.includes(resolvedRepoRoot)) {
+      currentGlobalConfig.projectRoots.push(resolvedRepoRoot);
+      fs.writeFileSync(GLOBAL_CONFIG_PATH, JSON.stringify(currentGlobalConfig, null, 2), 'utf-8');
+    }
+
+    ctx.watchRepo(resolvedRepoRoot);
+    ctx.broadcast();
+    return { success: true, repoPath: resolvedRepoRoot };
   });
 }

@@ -1,17 +1,18 @@
 import { defineConfig } from 'vite';
 import solidPlugin from 'vite-plugin-solid';
-import { overseer } from './src/backend'
 
-const overseerInstance = overseer()
+import { getOrInitOverseerGlobalConfig } from './src/backend/config.ts';
 
-const port = overseerInstance.config.port || 11111
-
-console.log(`Serving on port: ${port}. To change port, set "port" in ~/overseer.config.json and restart server.`)
+// Keeps the app on the same URL as `npm start`, with the dev API one port up
+// (see src/backend/index.ts --api-only).
+const appPort = getOrInitOverseerGlobalConfig().port || 11111;
 
 export default defineConfig({
-  plugins: [solidPlugin(), overseerInstance.plugin],
+  plugins: [solidPlugin()],
   server: {
-    port: overseerInstance.config.port || 11111,
-    fs: { strict: false }
-  },
+    port: appPort,
+    // Falling forward to the next free port would land on the API's port.
+    strictPort: true,
+    proxy: { '/api': `http://localhost:${appPort + 1}` }
+  }
 });

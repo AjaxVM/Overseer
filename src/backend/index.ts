@@ -1,119 +1,128 @@
+import fs from 'fs';
+import type { ServerResponse } from 'http';
 import path from 'path';
-import { getOrInitOverseerGlobalConfig, getOrInitRepoConfig } from './config';
-import type { RepoConfig } from './config';
-import { loadOrTrueUpProject } from './manifest';
-import {
-  handleGetProjects,
-  handleGetProject,
-  handlePostProjectDescription,
-  handlePostProjectReorder,
-  handlePostProjectRename,
-  handlePostProjectSync,
-  handlePostItemCreate,
-  handlePostItemDelete
-} from './routes/projects';
-import { handleGetFileRead, handlePostFileSave } from './routes/files';
-import {
-  handleGetAttachmentRaw,
-  handleGetAttachmentRead,
-  handlePostAttachmentCreate,
-  handlePostAttachmentDelete,
-  handlePostAttachmentSave
-} from './routes/attachments';
-import {
-  ensureRepoScaffold,
-  handleGetFsBrowse,
-  handlePostConfigSave,
-  handlePostProjectsAdd
-} from './routes/repos';
-import type { RouteContext } from './types';
 
-export function overseer() {
-  const globalConfig = getOrInitOverseerGlobalConfig();
+import fastifyStatic from '@fastify/static';
+import { watch } from 'chokidar';
+import Fastify from 'fastify';
+import type { FastifyError } from 'fastify';
 
-  return {
-    config: globalConfig,
-    plugin: {
-      name: 'overseer-api',
-      configureServer(server: any) {
-        const watchedRepoRoots = new Set<string>(globalConfig.projectRoots || []);
+import { getOrInitOverseerGlobalConfig, getOrInitRepoConfig } from './config.ts';
+import type { RepoConfig } from './config.ts';
+import { loadOrTrueUpProject } from './manifest.ts';
+import { attachmentRoutes } from './routes/attachments.ts';
+import { fileRoutes } from './routes/files.ts';
+import { projectRoutes } from './routes/projects.ts';
+import { ensureRepoScaffold, repoRoutes } from './routes/repos.ts';
+import type { RouteContext } from './types.ts';
 
-        watchedRepoRoots.forEach(repoRoot => {
-          const repoConfig = getOrInitRepoConfig(repoRoot);
-          const { docsPath, projectsPath } = ensureRepoScaffold(repoRoot, repoConfig);
+const globalConfig = getOrInitOverseerGlobalConfig();
+const appPort = globalConfig.port || 11111;
+// `npm run dev` passes this. Vite then owns the app port (see vite.config.ts) and
+// proxies /api to the next one up, and a stale dist/ from an earlier build isn't served.
+const apiOnly = process.argv.includes('--api-only');
+const port = apiOnly ? appPort + 1 : appPort;
+const clientDist = path.join(import.meta.dirname, '../../dist');
 
-          server.watcher.add(docsPath);
-          server.watcher.add(projectsPath);
-          server.watcher.add(path.join(repoRoot, 'overseer.json'));
-        });
+const app = Fastify({ bodyLimit: 10 * 1024 * 1024 });
 
-        // GET /api/project serves the cached manifest without touching disk beyond one
-        // JSON read (see routes/projects.ts) - this is what actually keeps that cache
-        // fresh, off the request path, so navigation is never blocked on a readdir/stat
-        // walk. Directories touched during the debounce window are queued and trued up
-        // just before the projects-update broadcast fires.
-        let watcherTimeout: NodeJS.Timeout | null = null;
-        const pendingTrueUps = new Map<string, RepoConfig>();
+app.setErrorHandler((err: FastifyError, _request, reply) => {
+  reply.code(err.statusCode ?? 400).send({ error: err.message });
+});
 
-        server.watcher.on('all', (_event: string, file: string) => {
-          if (file.includes('.git') || file.includes('node_modules')) return;
+const sseClients = new Set<ServerResponse>();
+const broadcast = () => {
+  for (const client of sseClients) client.write('event: projects-update\ndata: {}\n\n');
+};
 
-          const matchedRepo = Array.from(watchedRepoRoots).find(repoRoot => {
-            const repoConfig = getOrInitRepoConfig(repoRoot);
-            return (
-              file.startsWith(path.join(repoRoot, repoConfig.docsDir)) ||
-              file.startsWith(path.join(repoRoot, repoConfig.projectsDir)) ||
-              file === path.join(repoRoot, 'overseer.json')
-            );
-          });
-          if (!matchedRepo) return;
+app.get('/api/events', (request, reply) => {
+  reply.hijack();
+  reply.raw.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive'
+  });
+  // Flushes headers immediately so EventSource reports open before the first broadcast.
+  reply.raw.write(':\n\n');
+  sseClients.add(reply.raw);
+  request.raw.on('close', () => sseClients.delete(reply.raw));
+});
 
-          const repoConfig = getOrInitRepoConfig(matchedRepo);
-          const projectsRoot = path.join(matchedRepo, repoConfig.projectsDir);
-          if (file.startsWith(projectsRoot) && file !== projectsRoot) {
-            pendingTrueUps.set(path.dirname(file), repoConfig);
-          }
+const watchedRepoRoots = new Set<string>();
+const watcher = watch([], {
+  ignoreInitial: true,
+  ignored: file => file.includes('.git') || file.includes('node_modules')
+});
 
-          if (watcherTimeout) clearTimeout(watcherTimeout);
-          watcherTimeout = setTimeout(() => {
-            for (const [dir, cfg] of pendingTrueUps) {
-              try {
-                loadOrTrueUpProject(dir, cfg, { persist: false });
-              } catch (e) {
-                // Best-effort background refresh - a live nav request still falls back
-                // to a synchronous true-up if nothing is cached yet for that directory.
-              }
-            }
-            pendingTrueUps.clear();
-            server.ws.send({ type: 'custom', event: 'projects-update', file });
-          }, 150);
-        });
+const watchRepo = (repoRoot: string) => {
+  const repoConfig = getOrInitRepoConfig(repoRoot);
+  watchedRepoRoots.add(repoRoot);
+  watcher.add([
+    path.join(repoRoot, repoConfig.docsDir),
+    path.join(repoRoot, repoConfig.projectsDir),
+    path.join(repoRoot, 'overseer.json')
+  ]);
+};
 
-        server.middlewares.use((req: any, res: any, next: any) => {
-          const ctx: RouteContext = { watchedRepoRoots, server };
+for (const repoRoot of globalConfig.projectRoots || []) {
+  ensureRepoScaffold(repoRoot, getOrInitRepoConfig(repoRoot));
+  watchRepo(repoRoot);
+}
 
-          if (req.url === '/api/projects' && req.method === 'GET') return handleGetProjects(ctx, req, res);
-          if (req.url.startsWith('/api/project?') && req.method === 'GET') return handleGetProject(ctx, req, res);
-          if (req.url === '/api/project/description' && req.method === 'POST') return handlePostProjectDescription(req, res);
-          if (req.url === '/api/project/reorder' && req.method === 'POST') return handlePostProjectReorder(req, res);
-          if (req.url === '/api/project/rename' && req.method === 'POST') return handlePostProjectRename(ctx, req, res);
-          if (req.url === '/api/project/sync' && req.method === 'POST') return handlePostProjectSync(ctx, req, res);
-          if (req.url.startsWith('/api/file/read') && req.method === 'GET') return handleGetFileRead(req, res);
-          if (req.url === '/api/file/save' && req.method === 'POST') return handlePostFileSave(req, res);
-          if (req.url === '/api/item/create' && req.method === 'POST') return handlePostItemCreate(ctx, req, res);
-          if (req.url === '/api/item/delete' && req.method === 'POST') return handlePostItemDelete(ctx, req, res);
-          if (req.url === '/api/attachment/create' && req.method === 'POST') return handlePostAttachmentCreate(ctx, req, res);
-          if (req.url.startsWith('/api/attachment/read') && req.method === 'GET') return handleGetAttachmentRead(req, res);
-          if (req.url.startsWith('/api/attachment/raw') && req.method === 'GET') return handleGetAttachmentRaw(req, res);
-          if (req.url === '/api/attachment/save' && req.method === 'POST') return handlePostAttachmentSave(req, res);
-          if (req.url === '/api/attachment/delete' && req.method === 'POST') return handlePostAttachmentDelete(ctx, req, res);
-          if (req.url === '/api/config/save' && req.method === 'POST') return handlePostConfigSave(ctx, req, res);
-          if (req.url.startsWith('/api/fs/browse') && req.method === 'GET') return handleGetFsBrowse(req, res);
-          if (req.url === '/api/projects/add' && req.method === 'POST') return handlePostProjectsAdd(ctx, req, res);
+// GET /api/project serves the cached manifest without touching disk beyond one
+// JSON read (see routes/projects.ts) - this is what actually keeps that cache
+// fresh, off the request path, so navigation is never blocked on a readdir/stat
+// walk. Directories touched during the debounce window are queued and trued up
+// just before the projects-update broadcast fires.
+let watcherTimeout: NodeJS.Timeout | null = null;
+const pendingTrueUps = new Map<string, RepoConfig>();
 
-          next();
-        });
+watcher.on('all', (_event, file) => {
+  const matchedRepo = Array.from(watchedRepoRoots).find(repoRoot => {
+    const repoConfig = getOrInitRepoConfig(repoRoot);
+    return (
+      file.startsWith(path.join(repoRoot, repoConfig.docsDir)) ||
+      file.startsWith(path.join(repoRoot, repoConfig.projectsDir)) ||
+      file === path.join(repoRoot, 'overseer.json')
+    );
+  });
+  if (!matchedRepo) return;
+
+  const repoConfig = getOrInitRepoConfig(matchedRepo);
+  const projectsRoot = path.join(matchedRepo, repoConfig.projectsDir);
+  if (file.startsWith(projectsRoot) && file !== projectsRoot) {
+    pendingTrueUps.set(path.dirname(file), repoConfig);
+  }
+
+  if (watcherTimeout) clearTimeout(watcherTimeout);
+  watcherTimeout = setTimeout(() => {
+    for (const [dir, cfg] of pendingTrueUps) {
+      try {
+        loadOrTrueUpProject(dir, cfg, { persist: false });
+      } catch (e) {
+        // Best-effort background refresh - a live nav request still falls back
+        // to a synchronous true-up if nothing is cached yet for that directory.
       }
     }
-  };
+    pendingTrueUps.clear();
+    broadcast();
+  }, 150);
+});
+
+const ctx: RouteContext = { watchedRepoRoots, watchRepo, broadcast };
+projectRoutes(app, ctx);
+fileRoutes(app);
+attachmentRoutes(app, ctx);
+repoRoutes(app, ctx);
+
+if (!apiOnly && fs.existsSync(clientDist)) {
+  app.register(fastifyStatic, { root: clientDist });
+}
+
+await app.listen({ port, host: 'localhost' });
+
+if (apiOnly) {
+  console.log(`Overseer API on http://localhost:${port}. Open the app at http://localhost:${appPort}.`);
+} else {
+  console.log(`Overseer on http://localhost:${port}. To change port, set "port" in ~/.overseer.config.json and restart.`);
 }

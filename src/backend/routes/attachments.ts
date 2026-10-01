@@ -1,6 +1,9 @@
 import fs from 'fs';
 import path from 'path';
-import { getOrInitRepoConfig } from '../config';
+
+import type { FastifyInstance } from 'fastify';
+
+import { getOrInitRepoConfig } from '../config.ts';
 import {
   ATTACHMENT_EXTENSIONS,
   buildAttachmentFileName,
@@ -8,9 +11,9 @@ import {
   loadOrTrueUpProject,
   parseAttachmentFileName,
   writePreservingEol
-} from '../manifest';
-import { slugify } from './projects';
-import type { RouteContext } from '../types';
+} from '../manifest.ts';
+import { slugify } from './projects.ts';
+import type { RouteContext } from '../types.ts';
 
 const CONTENT_TYPES: Record<string, string> = {
   md: 'text/markdown; charset=utf-8',
@@ -19,20 +22,6 @@ const CONTENT_TYPES: Record<string, string> = {
   jpeg: 'image/jpeg',
   png: 'image/png'
 };
-
-function readJsonBody(req: any): Promise<any> {
-  return new Promise((resolve, reject) => {
-    let reqBody = '';
-    req.on('data', (chunk: string) => (reqBody += chunk));
-    req.on('end', () => {
-      try {
-        resolve(JSON.parse(reqBody));
-      } catch (e) {
-        reject(new Error('Invalid request body'));
-      }
-    });
-  });
-}
 
 // Finds any attachment already on disk for this ticket with the same slug, regardless
 // of extension - names are unique per ticket independent of format (e.g. attaching a
@@ -47,9 +36,19 @@ function findExistingAttachment(parentPath: string, ticketId: string, slug: stri
   return match ? path.join(parentPath, match.name) : null;
 }
 
-export async function handlePostAttachmentCreate(ctx: RouteContext, req: any, res: any) {
-  try {
-    const { parentPath, repoPath, ticketId, sourcePath, name, overwrite, blank } = await readJsonBody(req);
+export function attachmentRoutes(app: FastifyInstance, ctx: RouteContext) {
+  app.post<{
+    Body: {
+      parentPath?: string;
+      repoPath?: string;
+      ticketId?: string;
+      sourcePath?: string;
+      name?: string;
+      overwrite?: boolean;
+      blank?: boolean;
+    };
+  }>('/api/attachment/create', async (request, reply) => {
+    const { parentPath, repoPath, ticketId, sourcePath, name, overwrite, blank } = request.body;
     if (!parentPath || !repoPath || !ticketId || !name?.trim()) {
       throw new Error('parentPath, repoPath, ticketId, and name are required.');
     }
@@ -71,9 +70,7 @@ export async function handlePostAttachmentCreate(ctx: RouteContext, req: any, re
     const existing = findExistingAttachment(parentPath, ticketId, slug);
     if (existing) {
       if (!overwrite) {
-        res.statusCode = 409;
-        res.setHeader('Content-Type', 'application/json');
-        return res.end(JSON.stringify({ error: 'An attachment with this name already exists.' }));
+        return reply.code(409).send({ error: 'An attachment with this name already exists.' });
       }
       fs.unlinkSync(existing);
     }
@@ -83,42 +80,29 @@ export async function handlePostAttachmentCreate(ctx: RouteContext, req: any, re
     if (blank) {
       writePreservingEol(targetPath, `# ${name.trim()}\n`);
     } else {
-      fs.copyFileSync(sourcePath, targetPath);
+      fs.copyFileSync(sourcePath!, targetPath);
     }
 
-    const repoConfig = getOrInitRepoConfig(repoPath);
-    loadOrTrueUpProject(parentPath, repoConfig);
+    loadOrTrueUpProject(parentPath, getOrInitRepoConfig(repoPath));
 
-    ctx.server.ws.send({ type: 'custom', event: 'projects-update' });
-    res.setHeader('Content-Type', 'application/json');
-    return res.end(JSON.stringify({ success: true, fileName, name: name.trim(), slug, ext }));
-  } catch (e: any) {
-    res.statusCode = 400;
-    res.setHeader('Content-Type', 'application/json');
-    return res.end(JSON.stringify({ error: e.message }));
-  }
-}
+    ctx.broadcast();
+    return { success: true, fileName, name: name.trim(), slug, ext };
+  });
 
-export function handleGetAttachmentRead(req: any, res: any) {
-  const urlObj = new URL(req.url, 'http://localhost');
-  const filePath = urlObj.searchParams.get('path');
-  if (!filePath || !fs.existsSync(filePath) || !isAttachmentFileName(path.basename(filePath))) {
-    res.statusCode = 404;
-    return res.end(JSON.stringify({ error: 'Attachment not found' }));
-  }
-  const parsed = parseAttachmentFileName(path.basename(filePath))!;
-  if (parsed.ext !== 'md' && parsed.ext !== 'html') {
-    res.statusCode = 400;
-    return res.end(JSON.stringify({ error: 'Use /api/attachment/raw for this file type' }));
-  }
-  const content = fs.readFileSync(filePath, 'utf-8');
-  res.setHeader('Content-Type', 'application/json');
-  return res.end(JSON.stringify({ path: filePath, ext: parsed.ext, content }));
-}
+  app.get<{ Querystring: { path?: string } }>('/api/attachment/read', async (request, reply) => {
+    const filePath = request.query.path;
+    if (!filePath || !fs.existsSync(filePath) || !isAttachmentFileName(path.basename(filePath))) {
+      return reply.code(404).send({ error: 'Attachment not found' });
+    }
+    const parsed = parseAttachmentFileName(path.basename(filePath))!;
+    if (parsed.ext !== 'md' && parsed.ext !== 'html') {
+      throw new Error('Use /api/attachment/raw for this file type');
+    }
+    return { path: filePath, ext: parsed.ext, content: fs.readFileSync(filePath, 'utf-8') };
+  });
 
-export async function handlePostAttachmentSave(req: any, res: any) {
-  try {
-    const { path: filePath, content } = await readJsonBody(req);
+  app.post<{ Body: { path?: string; content?: string } }>('/api/attachment/save', async request => {
+    const { path: filePath, content } = request.body;
     if (!filePath || !isAttachmentFileName(path.basename(filePath))) {
       throw new Error('Valid attachment path is required.');
     }
@@ -126,46 +110,33 @@ export async function handlePostAttachmentSave(req: any, res: any) {
     if (parsed.ext !== 'md' && parsed.ext !== 'html') throw new Error('Only markdown/html attachments are editable.');
 
     writePreservingEol(filePath, content || '');
-    res.setHeader('Content-Type', 'application/json');
-    return res.end(JSON.stringify({ success: true }));
-  } catch (e: any) {
-    res.statusCode = 400;
-    res.setHeader('Content-Type', 'application/json');
-    return res.end(JSON.stringify({ error: e.message }));
-  }
-}
+    return { success: true };
+  });
 
-export function handleGetAttachmentRaw(req: any, res: any) {
-  const urlObj = new URL(req.url, 'http://localhost');
-  const filePath = urlObj.searchParams.get('path');
-  if (!filePath || !fs.existsSync(filePath) || !isAttachmentFileName(path.basename(filePath))) {
-    res.statusCode = 404;
-    return res.end('Attachment not found');
-  }
-  const parsed = parseAttachmentFileName(path.basename(filePath))!;
-  res.setHeader('Content-Type', CONTENT_TYPES[parsed.ext] || 'application/octet-stream');
-  return res.end(fs.readFileSync(filePath));
-}
-
-export async function handlePostAttachmentDelete(ctx: RouteContext, req: any, res: any) {
-  try {
-    const { attachmentPath, parentPath, repoPath } = await readJsonBody(req);
-    if (!attachmentPath || !fs.existsSync(attachmentPath) || !isAttachmentFileName(path.basename(attachmentPath))) {
-      throw new Error('Valid attachmentPath is required.');
+  app.get<{ Querystring: { path?: string } }>('/api/attachment/raw', async (request, reply) => {
+    const filePath = request.query.path;
+    if (!filePath || !fs.existsSync(filePath) || !isAttachmentFileName(path.basename(filePath))) {
+      return reply.code(404).type('text/plain').send('Attachment not found');
     }
-    fs.unlinkSync(attachmentPath);
+    const parsed = parseAttachmentFileName(path.basename(filePath))!;
+    return reply.type(CONTENT_TYPES[parsed.ext] || 'application/octet-stream').send(fs.readFileSync(filePath));
+  });
 
-    if (parentPath && repoPath && fs.existsSync(parentPath)) {
-      const repoConfig = getOrInitRepoConfig(repoPath);
-      loadOrTrueUpProject(parentPath, repoConfig);
+  app.post<{ Body: { attachmentPath?: string; parentPath?: string; repoPath?: string } }>(
+    '/api/attachment/delete',
+    async request => {
+      const { attachmentPath, parentPath, repoPath } = request.body;
+      if (!attachmentPath || !fs.existsSync(attachmentPath) || !isAttachmentFileName(path.basename(attachmentPath))) {
+        throw new Error('Valid attachmentPath is required.');
+      }
+      fs.unlinkSync(attachmentPath);
+
+      if (parentPath && repoPath && fs.existsSync(parentPath)) {
+        loadOrTrueUpProject(parentPath, getOrInitRepoConfig(repoPath));
+      }
+
+      ctx.broadcast();
+      return { success: true };
     }
-
-    ctx.server.ws.send({ type: 'custom', event: 'projects-update' });
-    res.setHeader('Content-Type', 'application/json');
-    return res.end(JSON.stringify({ success: true }));
-  } catch (e: any) {
-    res.statusCode = 400;
-    res.setHeader('Content-Type', 'application/json');
-    return res.end(JSON.stringify({ error: e.message }));
-  }
+  );
 }

@@ -1,7 +1,7 @@
 ---
 id: azqm9
 name: refactor app to improve maintainability
-status: idea
+status: done
 type: bug
 estimate: tiny
 complexity: simple

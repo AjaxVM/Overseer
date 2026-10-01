@@ -289,15 +289,13 @@ export default function App() {
 
   createEffect(() => {
     refreshTree().then(() => applyLocationState(tree()));
-    if (import.meta.hot) {
-      import.meta.hot.on('projects-update', () => {
-        refreshTree();
-        // The open project's own manifest (and its pendingSync flag, see handleSyncProject)
-        // needs its own refetch, or a background true-up would never show up until the
-        // user navigates away and back.
-        refreshProject();
-      });
-    }
+    new EventSource('/api/events').addEventListener('projects-update', () => {
+      refreshTree();
+      // The open project's own manifest (and its pendingSync flag, see handleSyncProject)
+      // needs its own refetch, or a background true-up would never show up until the
+      // user navigates away and back.
+      refreshProject();
+    });
   });
 
   // Warn on closing/reloading the tab with unsaved edits (poc-3). In-app navigation

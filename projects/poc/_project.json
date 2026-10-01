@@ -103,7 +103,7 @@
       {
         "id": "azqm9",
         "name": "refactor app to improve maintainability",
-        "status": "idea",
+        "status": "done",
         "type": "bug",
         "fileName": "azqm9-refactor-app-to-improve-maintainability.md"
       },
@@ -257,6 +257,12 @@
         "status": "idea",
         "type": "feature",
         "fileName": "qk7pf-track-assignee-history-per-status-transition.md"
+      },
+      {
+        "id": "pz7b4",
+        "name": "Tests",
+        "status": "idea",
+        "fileName": "pz7b4-tests.md"
       }
     ],
     "subprojects": []
