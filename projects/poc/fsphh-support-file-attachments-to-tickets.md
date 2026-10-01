@@ -1,7 +1,7 @@
 ---
 id: fsphh
 name: Support file attachments to tickets
-status: reviewing
+status: done
 type: feature
 estimate: 
 complexity: 

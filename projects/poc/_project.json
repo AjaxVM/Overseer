@@ -227,10 +227,39 @@
       {
         "id": "fsphh",
         "name": "Support file attachments to tickets",
-        "status": "reviewing",
+        "status": "done",
         "type": "feature",
-        "assignee": "",
         "fileName": "fsphh-support-file-attachments-to-tickets.md"
+      },
+      {
+        "id": "xnn77",
+        "name": "Creating a ticket should navigate to that ticket edit page",
+        "status": "idea",
+        "type": "",
+        "assignee": "",
+        "fileName": "xnn77-creating-a-ticket-should-navigate-to-that-ticket-edit-page.md"
+      },
+      {
+        "id": "fb33w",
+        "name": "Ability to link to other tickets",
+        "status": "idea",
+        "type": "",
+        "assignee": "",
+        "fileName": "fb33w-ability-to-link-to-other-tickets.md"
+      },
+      {
+        "id": "pqf24",
+        "name": "Issue when switching repos sometimes",
+        "status": "idea",
+        "type": "bug",
+        "assignee": "",
+        "fileName": "pqf24-issue-when-switching-repos-sometimes.md"
+      },
+      {
+        "id": "dkkrt",
+        "name": "Support resizing the sidebar horizontal width",
+        "status": "idea",
+        "fileName": "dkkrt-support-resizing-the-sidebar-horizontal-width.md"
       }
     ],
     "subprojects": []
